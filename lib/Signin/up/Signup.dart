@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'dart:math' as math;
 
 import 'Signin.dart';
+import '../../auth_service.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({Key? key}) : super(key: key);
@@ -26,10 +27,12 @@ class _SignUpScreenState extends State<SignUpScreen>
 
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  String? _selectedUserType;
+  String? _selectedUserType; // 'Patient' or 'Caregiver'
+  final AuthService _auth = AuthService();
 
   @override
   void initState() {
@@ -67,12 +70,12 @@ class _SignUpScreenState extends State<SignUpScreen>
     _floatingController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
-
-  void _fakeSignUp() {
+  Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedUserType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -89,14 +92,54 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
+    Map<String, dynamic> result;
+    try {
+      if (_selectedUserType == 'Patient') {
+        result = await _auth.signUpPatient(
+          email: _emailController.text.trim(),
+          phone: _phoneController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _usernameController.text.trim(),
+        );
+      } else {
+        result = await _auth.signUpCaregiver(
+          email: _emailController.text.trim(),
+          username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _usernameController.text.trim(),
+        );
+      }
+    } catch (e) {
+      result = {'success': false, 'error': 'Unexpected: $e'};
+    }
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account created as $_selectedUserType! (demo)')),
+        const SnackBar(content: Text('Account created successfully')),
       );
-    });
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 600),
+            pageBuilder: (_, __, ___) => const SignInScreen(),
+            transitionsBuilder: (_, animation, __, child) {
+              return SlideTransition(
+                position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                child: child,
+              );
+            },
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error'] ?? 'Failed to create account')),
+      );
+    }
   }
 
   @override
@@ -209,6 +252,19 @@ class _SignUpScreenState extends State<SignUpScreen>
                             isWeb: isWeb,
                           ),
                           const SizedBox(height: 16),
+                          // Phone (only for Patient)
+                          if (_selectedUserType == 'Patient') ...[
+                            _buildTextField(
+                              label: 'Phone',
+                              controller: _phoneController,
+                              icon: Icons.phone_outlined,
+                              validator: _validatePhone,
+                              keyboardType: TextInputType.phone,
+                              hintText: 'Enter phone number',
+                              isWeb: isWeb,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
 
                           // Password
                           _buildTextField(
@@ -309,7 +365,14 @@ class _SignUpScreenState extends State<SignUpScreen>
                               DropdownMenuItem(value: 'Patient', child: Text('Patient')),
                               DropdownMenuItem(value: 'Caregiver', child: Text('Caregiver')),
                             ],
-                            onChanged: _isLoading ? null : (val) => setState(() => _selectedUserType = val),
+                            onChanged: _isLoading
+                                ? null
+                                : (val) {
+                                    setState(() {
+                                      _selectedUserType = val;
+                                      _phoneController.clear();
+                                    });
+                                  },
                             validator: (val) => val == null ? 'Please select a user type' : null,
                           ),
                           const SizedBox(height: 28),
@@ -318,7 +381,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _fakeSignUp,
+                              onPressed: _isLoading ? null : _handleSignUp,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFF8383),
                                 foregroundColor: Colors.white,
@@ -497,6 +560,15 @@ class _SignUpScreenState extends State<SignUpScreen>
   String? _validateConfirmPassword(String? v) {
     if (v == null || v.isEmpty) return 'Please confirm your password';
     if (v != _passwordController.text) return 'Passwords do not match';
+    return null;
+  }
+
+  String? _validatePhone(String? v) {
+    if (_selectedUserType != 'Patient') return null;
+    if (v == null || v.isEmpty) return 'Please enter phone number';
+    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 7) return 'Phone number too short';
+    if (digits.length > 15) return 'Phone number too long';
     return null;
   }
 }

@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import 'dart:math' as math;
 
 import 'Signup.dart'; // ← Only navigation kept
+import '../../auth_service.dart';
+import '../../Patient/Home.dart';
+import '../../Caregiver/Home.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({Key? key}) : super(key: key);
@@ -22,9 +25,14 @@ class _SignInScreenState extends State<SignInScreen>
   final _formKey = GlobalKey<FormState>();
   bool _rememberMe = false;
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
-  final _emailController = TextEditingController(text: 'demo@email.com');
+  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  String? _selectedRole; // 'Patient' or 'Caregiver'
+  final AuthService _auth = AuthService();
 
   @override
   void initState() {
@@ -64,6 +72,7 @@ class _SignInScreenState extends State<SignInScreen>
     _controller.dispose();
     _floatingController.dispose();
     _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -88,14 +97,59 @@ class _SignInScreenState extends State<SignInScreen>
     return null;
   }
 
-  void _handleLoginPress() {
-    if (_formKey.currentState!.validate()) {
-      HapticFeedback.mediumImpact();
+  String? _validateUsername(String? value) {
+    if (_selectedRole != 'Caregiver') return null; // not required for patient
+    if (value == null || value.isEmpty) return 'Please enter username';
+    if (value.length < 3) return 'Too short';
+    return null;
+  }
+
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedRole == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Login pressed - Add your auth logic here'),
-          backgroundColor: Color(0xFFFF8383),
-        ),
+        const SnackBar(content: Text('Please select a role')),
+      );
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    setState(() => _isLoading = true);
+
+    Map<String, dynamic> result;
+    try {
+      if (_selectedRole == 'Patient') {
+        result = await _auth.signInPatient(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      } else {
+        result = await _auth.signInCaregiver(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      }
+    } catch (e) {
+      result = {'success': false, 'error': 'Unexpected: $e'};
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      // Navigate by role
+      if (_selectedRole == 'Caregiver') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const CaregiverHomeScreen()),
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PatientHomeScreen()),
+        );
+      }
+    } else {
+      final msg = (result['error'] ?? 'Login failed').toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
       );
     }
   }
@@ -197,15 +251,61 @@ class _SignInScreenState extends State<SignInScreen>
                           ),
                           const SizedBox(height: 32),
 
-                          // Email Field
-                          _buildTextField(
-                            label: 'Email',
-                            controller: _emailController,
-                            icon: Icons.email_outlined,
-                            validator: _validateEmail,
-                            keyboardType: TextInputType.emailAddress,
-                            isWeb: isWeb,
+                          // Role selection
+                          Text(
+                            'User Type',
+                            style: TextStyle(
+                              fontSize: isWeb ? 18 : 16,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF424242),
+                            ),
                           ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _selectedRole,
+                            hint: const Text('Select your role'),
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFBDBDBD)),
+                            elevation: 2,
+                            dropdownColor: Colors.white,
+                            style: TextStyle(fontSize: isWeb ? 16 : 14, color: const Color(0xFF424242)),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.account_circle_outlined, color: Color(0xFFBDBDBD), size: 20),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                              enabledBorder: const UnderlineInputBorder(
+                                borderSide: BorderSide(color: Color(0xFFBDBDBD), width: 0.5),
+                              ),
+                              focusedBorder: const UnderlineInputBorder(
+                                borderSide: BorderSide(color: Color(0xFFFF8383), width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'Patient', child: Text('Patient')),
+                              DropdownMenuItem(value: 'Caregiver', child: Text('Caregiver')),
+                            ],
+                            onChanged: _isLoading ? null : (val) => setState(() => _selectedRole = val),
+                            validator: (val) => val == null ? 'Please select a user type' : null,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Username or Email Field depending on role
+                          if (_selectedRole == 'Caregiver') ...[
+                            _buildTextField(
+                              label: 'Username',
+                              controller: _usernameController,
+                              icon: Icons.person_outline,
+                              validator: _validateUsername,
+                              isWeb: isWeb,
+                            ),
+                          ] else ...[
+                            _buildTextField(
+                              label: 'Email',
+                              controller: _emailController,
+                              icon: Icons.email_outlined,
+                              validator: _validateEmail,
+                              keyboardType: TextInputType.emailAddress,
+                              isWeb: isWeb,
+                            ),
+                          ],
                           const SizedBox(height: 20),
 
                           // Password Field
@@ -288,7 +388,7 @@ class _SignInScreenState extends State<SignInScreen>
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _handleLoginPress,
+                              onPressed: _isLoading ? null : _handleLogin,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFF8383),
                                 foregroundColor: Colors.white,
@@ -299,14 +399,20 @@ class _SignInScreenState extends State<SignInScreen>
                                 elevation: 8,
                                 shadowColor: const Color(0xFFFF8383).withOpacity(0.4),
                               ),
-                              child: Text(
-                                'Login',
-                                style: TextStyle(
-                                  fontSize: isWeb ? 20 : 18,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                    )
+                                  : Text(
+                                      'Login',
+                                      style: TextStyle(
+                                        fontSize: isWeb ? 20 : 18,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 24),
