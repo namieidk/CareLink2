@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "702847166853",
+    "project_id": "carelink-26412",
+    "storage_bucket": "carelink-26412.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702847166853:android:18143a5b88c791a552fcec",
+        "android_client_info": {
+          "package_name": "com.example.carelink"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "702847166853-tmvkacfunu6tbdjs6gjr40cn69ig7u14.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGeZ_5sHcVQ_Ubp-syfLODSRbfQpxSNpY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "702847166853-tmvkacfunu6tbdjs6gjr40cn69ig7u14.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "702847166853-hgj4fl0dr32h9t5or8ibnug73tc74rv1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.carelink"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702847166853:android:a44bba9917b2f72252fcec",
+        "android_client_info": {
+          "package_name": "com.example.finalcarelink"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "702847166853-tmvkacfunu6tbdjs6gjr40cn69ig7u14.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGeZ_5sHcVQ_Ubp-syfLODSRbfQpxSNpY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "702847166853-tmvkacfunu6tbdjs6gjr40cn69ig7u14.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "702847166853-hgj4fl0dr32h9t5or8ibnug73tc74rv1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.carelink"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
