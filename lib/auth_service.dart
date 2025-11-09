@@ -13,6 +13,68 @@ class AuthService {
   Stream<auth.User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   // ──────────────────────────────────────────────
+  // UNIFIED EMAIL SIGN IN (for Patient & Caregiver)
+  // ──────────────────────────────────────────────
+  Future<Map<String, dynamic>> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      // Sign in with Firebase Auth
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final uid = credential.user!.uid;
+
+      // Check if user is a Patient
+      final patientDoc = await Patient.collection.doc(uid).get();
+      if (patientDoc.exists) {
+        final data = patientDoc.data() as Map<String, dynamic>;
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Patient',
+          'message': 'Patient login successful'
+        };
+      }
+
+      // Check if user is a Caregiver
+      final caregiverDoc = await Caregiver.collection.doc(uid).get();
+      if (caregiverDoc.exists) {
+        final data = caregiverDoc.data() as Map<String, dynamic>;
+        
+        if (data['isActive'] == false) {
+          await _firebaseAuth.signOut();
+          return {'success': false, 'error': 'Account is deactivated'};
+        }
+
+        await Caregiver.collection.doc(uid)
+            .update({'lastLogin': FieldValue.serverTimestamp()});
+
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Caregiver',
+          'message': 'Caregiver login successful'
+        };
+      }
+
+      // If user exists in Firebase Auth but not in our collections
+      await _firebaseAuth.signOut();
+      return {'success': false, 'error': 'User data not found in database'};
+
+    } on auth.FirebaseAuthException catch (e) {
+      return {'success': false, 'error': _getAuthErrorMessage(e)};
+    } catch (e) {
+      return {'success': false, 'error': 'Unexpected error: $e'};
+    }
+  }
+
+  // ──────────────────────────────────────────────
   // PATIENT SIGN UP
   // ──────────────────────────────────────────────
   Future<Map<String, dynamic>> signUpPatient({
@@ -67,7 +129,7 @@ class AuthService {
       }
 
       final data = doc.data()!;
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'message': 'Login successful'};
+      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Patient', 'message': 'Login successful'};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -173,7 +235,7 @@ class AuthService {
       await Doctor.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'message': 'Login successful'};
+      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Doctor', 'message': 'Login successful'};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -262,7 +324,7 @@ class AuthService {
       await Caregiver.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'message': 'Login successful'};
+      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Caregiver', 'message': 'Login successful'};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -348,7 +410,7 @@ class AuthService {
       await Admin.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'message': 'Login successful'};
+      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Admin', 'message': 'Login successful'};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {

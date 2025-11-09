@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 
-import 'Signup.dart'; // ← Only navigation kept
+import 'Signup.dart';
 import '../../auth_service.dart';
 import '../../Patient/Home.dart';
 import '../../Caregiver/Home.dart';
@@ -28,10 +28,8 @@ class _SignInScreenState extends State<SignInScreen>
   bool _isLoading = false;
 
   final _emailController = TextEditingController();
-  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String? _selectedRole; // 'Patient' or 'Caregiver'
   final AuthService _auth = AuthService();
 
   @override
@@ -72,7 +70,6 @@ class _SignInScreenState extends State<SignInScreen>
     _controller.dispose();
     _floatingController.dispose();
     _emailController.dispose();
-    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -97,37 +94,22 @@ class _SignInScreenState extends State<SignInScreen>
     return null;
   }
 
-  String? _validateUsername(String? value) {
-    if (_selectedRole != 'Caregiver') return null; // not required for patient
-    if (value == null || value.isEmpty) return 'Please enter username';
-    if (value.length < 3) return 'Too short';
-    return null;
-  }
-
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedRole == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a role')),
-      );
-      return;
-    }
+    
     HapticFeedback.mediumImpact();
     setState(() => _isLoading = true);
 
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
     Map<String, dynamic> result;
     try {
-      if (_selectedRole == 'Patient') {
-        result = await _auth.signInPatient(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-      } else {
-        result = await _auth.signInCaregiver(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-      }
+      // Call the unified sign-in method
+      result = await _auth.signInWithEmail(
+        email: email,
+        password: password,
+      );
     } catch (e) {
       result = {'success': false, 'error': 'Unexpected: $e'};
     }
@@ -136,14 +118,20 @@ class _SignInScreenState extends State<SignInScreen>
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      // Navigate by role
-      if (_selectedRole == 'Caregiver') {
+      // Navigate based on the role returned from auth service
+      final role = result['role'];
+      
+      if (role == 'Caregiver') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const CaregiverHomeScreen()),
         );
-      } else {
+      } else if (role == 'Patient') {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const PatientHomeScreen()),
+          MaterialPageRoute(builder: (_) => const PatientHomePage()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unknown user type')),
         );
       }
     } else {
@@ -168,7 +156,7 @@ class _SignInScreenState extends State<SignInScreen>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Original animated background (unchanged)
+          // Original animated background
           Positioned.fill(
             child: AnimatedBuilder(
               animation: _floatingController,
@@ -180,7 +168,7 @@ class _SignInScreenState extends State<SignInScreen>
             ),
           ),
 
-          // Logo – ONLY Image.asset (no errorBuilder)
+          // Logo
           Positioned(
             left: horizontalPadding,
             right: horizontalPadding,
@@ -195,7 +183,7 @@ class _SignInScreenState extends State<SignInScreen>
             ),
           ),
 
-          // White curved panel - EXACT SAME
+          // White curved panel
           Positioned(
             left: 0,
             right: 0,
@@ -251,61 +239,15 @@ class _SignInScreenState extends State<SignInScreen>
                           ),
                           const SizedBox(height: 32),
 
-                          // Role selection
-                          Text(
-                            'User Type',
-                            style: TextStyle(
-                              fontSize: isWeb ? 18 : 16,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF424242),
-                            ),
+                          // Email Field
+                          _buildTextField(
+                            label: 'Email',
+                            controller: _emailController,
+                            icon: Icons.email_outlined,
+                            validator: _validateEmail,
+                            keyboardType: TextInputType.emailAddress,
+                            isWeb: isWeb,
                           ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<String>(
-                            value: _selectedRole,
-                            hint: const Text('Select your role'),
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFBDBDBD)),
-                            elevation: 2,
-                            dropdownColor: Colors.white,
-                            style: TextStyle(fontSize: isWeb ? 16 : 14, color: const Color(0xFF424242)),
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.account_circle_outlined, color: Color(0xFFBDBDBD), size: 20),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                              enabledBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: Color(0xFFBDBDBD), width: 0.5),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: Color(0xFFFF8383), width: 2),
-                              ),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: 'Patient', child: Text('Patient')),
-                              DropdownMenuItem(value: 'Caregiver', child: Text('Caregiver')),
-                            ],
-                            onChanged: _isLoading ? null : (val) => setState(() => _selectedRole = val),
-                            validator: (val) => val == null ? 'Please select a user type' : null,
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Username or Email Field depending on role
-                          if (_selectedRole == 'Caregiver') ...[
-                            _buildTextField(
-                              label: 'Username',
-                              controller: _usernameController,
-                              icon: Icons.person_outline,
-                              validator: _validateUsername,
-                              isWeb: isWeb,
-                            ),
-                          ] else ...[
-                            _buildTextField(
-                              label: 'Email',
-                              controller: _emailController,
-                              icon: Icons.email_outlined,
-                              validator: _validateEmail,
-                              keyboardType: TextInputType.emailAddress,
-                              isWeb: isWeb,
-                            ),
-                          ],
                           const SizedBox(height: 20),
 
                           // Password Field
@@ -678,7 +620,6 @@ class ModernBackgroundPainter extends CustomPainter {
       animation != oldDelegate.animation;
 }
 
-// CareLinkLogoPainter kept only for background (not used in logo image)
 class CareLinkLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
