@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'Home.dart';
 import 'patient.dart';
 import 'caremed.dart';
+import 'Profile.dart'; // Added Profile import
 
 class CalendarScreen extends StatelessWidget {
   const CalendarScreen({Key? key}) : super(key: key);
@@ -371,17 +372,17 @@ class CalendarScreen extends StatelessWidget {
     );
   }
 
+  // === BOTTOM NAVIGATION (Copied from Home) ===
   Widget _buildBottomNav(BuildContext context, int currentIndex) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, -5),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFAFBFC),
+        border: Border(
+          top: BorderSide(
+            color: Color(0xFFE8EAED),
+            width: 1,
           ),
-        ],
+        ),
       ),
       child: SafeArea(
         child: Padding(
@@ -393,7 +394,7 @@ class CalendarScreen extends StatelessWidget {
               _buildNavItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
               _buildNavItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
               _buildNavItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
-              _buildNavItem(context, Icons.settings, 'Settings', currentIndex == 4, 4),
+              _buildNavItem(context, Icons.person, 'Profile', currentIndex == 4, 4),
             ],
           ),
         ),
@@ -405,25 +406,32 @@ class CalendarScreen extends StatelessWidget {
     return Expanded(
       child: InkWell(
         onTap: () {
-          if (index == 0 && !isActive) {
+          if (isActive) return;
+
+          if (index == 0) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => CaregiverHomeScreen()),
             );
-          } else if (index == 1 && !isActive) {
+          } else if (index == 1) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => PatientsScreen()),
             );
-          } else if (index == 2 && !isActive) {
+          } else if (index == 2) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => MedicationScreen()),
             );
-          } else if (index == 3 && !isActive) {
+          } else if (index == 3) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => CalendarScreen()),
+            );
+          } else if (index == 4) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ProfileScreen()),
             );
           }
         },

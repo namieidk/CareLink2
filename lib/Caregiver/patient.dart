@@ -4,6 +4,7 @@ import 'Home.dart';
 import 'caremed.dart';
 import 'calendar.dart';
 import 'patients/addpatient.dart';
+import 'Profile.dart'; // Added Profile import
 
 /// Patient model
 class Patient {
@@ -35,7 +36,6 @@ class Patient {
     required this.address,
     required this.email,
     required this.phoneNumber,
-    
   });
 }
 
@@ -61,7 +61,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
       address: '123 Rizal St, Manila',
       email: 'roberto.cruz@email.com',
       phoneNumber: '+63 912 345 6789',
-      
     ),
     Patient(
       name: 'Elena Torres',
@@ -76,7 +75,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
       address: '456 Bonifacio Ave, Quezon City',
       email: 'elena.torres@email.com',
       phoneNumber: '+63 917 234 5678',
-      
     ),
   ];
 
@@ -85,36 +83,35 @@ class _PatientsScreenState extends State<PatientsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F9FA),
       body: SafeArea(
         child: Column(
           children: [
             // Header
             Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF6C5CE7), Color(0xFF8B7FE8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
+                color: Color(0xFFFAFBFC),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               child: Column(
                 children: [
                   Row(
                     children: [
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: Icon(Icons.arrow_back, color: Colors.grey[800]),
                       ),
-                      const Text(
+                      Text(
                         'My Patients',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Colors.grey[900],
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
@@ -122,11 +119,11 @@ class _PatientsScreenState extends State<PatientsScreen> {
                       const Spacer(),
                       IconButton(
                         onPressed: () {},
-                        icon: const Icon(Icons.search, color: Colors.white),
+                        icon: Icon(Icons.search, color: Colors.grey[700]),
                       ),
                       IconButton(
                         onPressed: () {},
-                        icon: const Icon(Icons.filter_list, color: Colors.white),
+                        icon: Icon(Icons.filter_list, color: Colors.grey[700]),
                       ),
                     ],
                   ),
@@ -188,15 +185,31 @@ class _PatientsScreenState extends State<PatientsScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: const Color(0xFFF5F6F7),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFE8EAED),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
-          Text(count,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(
+            count,
+            style: TextStyle(
+              color: Colors.grey[900],
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 11,
+            ),
+          ),
         ],
       ),
     );
@@ -206,9 +219,19 @@ class _PatientsScreenState extends State<PatientsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFDFDFE),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15)],
+        border: Border.all(
+          color: const Color(0xFFE8EAED),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,7 +242,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: const Color(0xFFF5F6F7),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: p.photoPath != null && p.photoPath!.isNotEmpty
@@ -227,20 +250,35 @@ class _PatientsScreenState extends State<PatientsScreen> {
                         borderRadius: BorderRadius.circular(16),
                         child: Image.file(File(p.photoPath!), fit: BoxFit.cover),
                       )
-                    : const Icon(Icons.person, size: 36, color: Colors.grey),
+                    : Icon(Icons.person, size: 36, color: Colors.grey[400]),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.name,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                    Text('${p.age} • ${p.gender}',
-                        style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                    Text(p.condition,
-                        style: const TextStyle(color: Color(0xFF6C5CE7), fontSize: 13)),
+                    Text(
+                      p.name,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[900],
+                      ),
+                    ),
+                    Text(
+                      '${p.age} • ${p.gender}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      p.condition,
+                      style: const TextStyle(
+                        color: Color(0xFF6C5CE7),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -260,65 +298,103 @@ class _PatientsScreenState extends State<PatientsScreen> {
           children: [
             Icon(icon, size: 18, color: Colors.grey[700]),
             const SizedBox(width: 8),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ),
           ],
         ),
       );
 
+  // === BOTTOM NAVIGATION (Copied from Home) ===
   Widget _buildBottomNav(BuildContext context, int currentIndex) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      decoration: const BoxDecoration(
+        color: Color(0xFFFAFBFC),
+        border: Border(
+          top: BorderSide(
+            color: Color(0xFFE8EAED),
+            width: 1,
+          ),
+        ),
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(context, Icons.home, 'Home', currentIndex == 0, 0),
-            _buildNavItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
-            _buildNavItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
-            _buildNavItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
-            _buildNavItem(context, Icons.settings, 'Settings', currentIndex == 4, 4),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(context, Icons.home, 'Home', currentIndex == 0, 0),
+              _buildNavItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
+              _buildNavItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
+              _buildNavItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
+              _buildNavItem(context, Icons.person, 'Profile', currentIndex == 4, 4),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(
-      BuildContext context, IconData icon, String label, bool isActive, int index) {
-    return InkWell(
-      onTap: () {
-        if (index == 0) {
-          Navigator.pushReplacement(context,
-              MaterialPageRoute(builder: (_) => const CaregiverHomeScreen()));
-        } else if (index == 1) {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => const PatientsScreen()));
-        } else if (index == 2) {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => const MedicationScreen()));
-        } else if (index == 3) {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => const CalendarScreen()));
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                color: isActive ? const Color(0xFF6C5CE7) : Colors.grey[400], size: 26),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? const Color(0xFF6C5CE7) : Colors.grey[400],
-                fontSize: 11,
+  Widget _buildNavItem(BuildContext context, IconData icon, String label, bool isActive, int index) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          if (isActive) return;
+
+          if (index == 0) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => CaregiverHomeScreen()),
+            );
+          } else if (index == 1) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => PatientsScreen()),
+            );
+          } else if (index == 2) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => MedicationScreen()),
+            );
+          } else if (index == 3) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => CalendarScreen()),
+            );
+          } else if (index == 4) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ProfileScreen()),
+            );
+          }
+        },
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? Color(0xFF6C5CE7) : Colors.grey[400],
+                size: 26,
               ),
-            ),
-          ],
+              SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isActive ? Color(0xFF6C5CE7) : Colors.grey[400],
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:dropdown_search/dropdown_search.dart';
-import '../patient.dart'; // your Patient model
+import 'package:country_state_city/country_state_city.dart' as csc;
+import '../patient.dart';
 
 class AddPatientScreen extends StatefulWidget {
-  const AddPatientScreen({Key? key}) : super(key: key);
+  const AddPatientScreen({super.key});
 
   @override
   State<AddPatientScreen> createState() => _AddPatientScreenState();
@@ -28,7 +29,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
   // Dropdown selections
   String? _selectedGender;
-  String? _selectedCountry;
+  csc.Country? _selectedCountry;
   String? _selectedCity;
 
   String? _phoneNumber;
@@ -39,81 +40,53 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   final List<TextEditingController> _medCtrls = [];
   final List<Widget> _medFields = [];
 
-  // Dropdown options
   final List<String> _genderOptions = ['Male', 'Female'];
-  
-  // Countries list
-  final List<String> _countries = [
-    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Argentina', 'Armenia',
-    'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados',
-    'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina',
-    'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cambodia',
-    'Cameroon', 'Canada', 'Cape Verde', 'Central African Republic', 'Chad', 'Chile', 'China',
-    'Colombia', 'Comoros', 'Congo', 'Costa Rica', 'Croatia', 'Cuba', 'Cyprus', 'Czech Republic',
-    'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'East Timor', 'Ecuador', 'Egypt',
-    'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Ethiopia', 'Fiji', 'Finland',
-    'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala',
-    'Guinea', 'Guinea-Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India',
-    'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan',
-    'Kazakhstan', 'Kenya', 'Kiribati', 'North Korea', 'South Korea', 'Kuwait', 'Kyrgyzstan',
-    'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania',
-    'Luxembourg', 'Macedonia', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta',
-    'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco',
-    'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal',
-    'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'Norway', 'Oman', 'Pakistan',
-    'Palau', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal',
-    'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia',
-    'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe',
-    'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia',
-    'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa', 'South Sudan', 'Spain', 'Sri Lanka',
-    'Sudan', 'Suriname', 'Swaziland', 'Sweden', 'Switzerland', 'Syria', 'Taiwan', 'Tajikistan',
-    'Tanzania', 'Thailand', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey',
-    'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom',
-    'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam',
-    'Yemen', 'Zambia', 'Zimbabwe'
-  ];
 
-  // Cities map - Philippines cities as example, you can add more countries
-  final Map<String, List<String>> _citiesByCountry = {
-    'Philippines': [
-      'Manila', 'Quezon City', 'Caloocan', 'Davao City', 'Cebu City', 'Zamboanga City',
-      'Taguig', 'Antipolo', 'Pasig', 'Cagayan de Oro', 'Parañaque', 'Valenzuela', 'Dasmariñas',
-      'Las Piñas', 'Makati', 'Bacolod', 'General Santos', 'Bacoor', 'Iloilo City', 'Muntinlupa',
-      'Cavite City', 'Baguio', 'San Jose del Monte', 'Mandaluyong', 'Calamba', 'Marikina',
-      'Pasay', 'Malabon', 'Navotas', 'Batangas City', 'San Pedro', 'Mabalacat', 'Tarlac City',
-      'Lapu-Lapu City', 'Mandaue', 'Angeles City', 'Tagum', 'Cabanatuan', 'Lucena', 'Olongapo'
-    ],
-    'United States': [
-      'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio',
-      'San Diego', 'Dallas', 'San Jose', 'Austin', 'Jacksonville', 'Fort Worth', 'Columbus',
-      'Charlotte', 'San Francisco', 'Indianapolis', 'Seattle', 'Denver', 'Washington DC'
-    ],
-    'United Kingdom': [
-      'London', 'Birmingham', 'Leeds', 'Glasgow', 'Sheffield', 'Manchester', 'Edinburgh',
-      'Liverpool', 'Bristol', 'Cardiff', 'Belfast', 'Leicester', 'Coventry', 'Bradford',
-      'Nottingham', 'Newcastle', 'Brighton', 'Southampton', 'Portsmouth', 'Reading'
-    ],
-    'Canada': [
-      'Toronto', 'Montreal', 'Vancouver', 'Calgary', 'Edmonton', 'Ottawa', 'Winnipeg',
-      'Quebec City', 'Hamilton', 'Kitchener', 'London', 'Victoria', 'Halifax', 'Oshawa',
-      'Windsor', 'Saskatoon', 'Regina', 'St. Catharines', 'Barrie', 'Kelowna'
-    ],
-    'Australia': [
-      'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Gold Coast', 'Canberra',
-      'Newcastle', 'Wollongong', 'Logan City', 'Geelong', 'Hobart', 'Townsville', 'Cairns',
-      'Darwin', 'Toowoomba', 'Ballarat', 'Bendigo', 'Albury', 'Launceston'
-    ],
-  };
-
-  List<String> get _availableCities {
-    if (_selectedCountry == null) return [];
-    return _citiesByCountry[_selectedCountry] ?? ['Other'];
-  }
+  // Countries & cities
+  List<csc.Country> _countries = [];
+  List<String> _availableCities = [];
+  bool _countriesLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _addMedField(); // one field by default
+    _loadCountries();
+    _addMedField();
+  }
+
+  Future<void> _loadCountries() async {
+    try {
+      final countries = await csc.getAllCountries();
+      setState(() {
+        _countries = countries;
+        _countriesLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _countriesLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadCitiesForCountry(String? isoCode) async {
+    if (isoCode == null) {
+      setState(() => _availableCities = []);
+      return;
+    }
+    
+    try {
+      // Use getCountryCities instead of getCities
+      final cities = await csc.getCountryCities(isoCode);
+      setState(() {
+        _selectedCity = null;
+        _availableCities = cities.map((city) => city.name).toList();
+      });
+    } catch (e) {
+      setState(() {
+        _selectedCity = null;
+        _availableCities = [];
+      });
+    }
   }
 
   void _addMedField() {
@@ -157,9 +130,15 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked != null) setState(() => _photoPath = picked.path);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (picked != null) setState(() => _photoPath = picked.path);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to pick image')),
+      );
+    }
   }
 
   void _save() {
@@ -189,7 +168,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
       age: int.parse(_ageCtrl.text),
       gender: _selectedGender!,
       phoneNumber: _phoneNumber!,
-      address: '${_addressCtrl.text.trim()}, $_selectedCity, $_selectedCountry',
+      address: '${_addressCtrl.text.trim()}, $_selectedCity, ${_selectedCountry!.name}',
       email: _emailCtrl.text.trim(),
       condition: _conditionCtrl.text.trim(),
       medications: meds,
@@ -217,6 +196,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     super.dispose();
   }
 
+  String _countryDisplay(csc.Country? c) => c == null ? '' : '${c.flag ?? ''} ${c.name}';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -234,6 +215,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Photo
               Center(
                 child: Stack(
                   children: [
@@ -268,6 +250,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               _sectionTitle('Personal Information'),
               const SizedBox(height: 16),
 
+              // First / Last name
               Row(
                 children: [
                   Expanded(
@@ -289,6 +272,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Age / Gender
               Row(
                 children: [
                   Expanded(
@@ -323,6 +307,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Phone
               IntlPhoneField(
                 decoration: _inputDec('Phone Number', Icons.phone),
                 initialCountryCode: 'PH',
@@ -335,6 +320,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Email
               TextFormField(
                 controller: _emailCtrl,
                 decoration: _inputDec('Email Address', Icons.email_outlined),
@@ -347,16 +333,17 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Country and City Dropdowns
+              // Country / City
               Row(
                 children: [
                   Expanded(
-                    child: DropdownSearch<String>(
+                    child: DropdownSearch<csc.Country>(
                       selectedItem: _selectedCountry,
                       items: _countries,
-                      popupProps: const PopupProps.menu(
+                      itemAsString: _countryDisplay,
+                      popupProps: PopupProps.menu(
                         showSearchBox: true,
-                        searchFieldProps: TextFieldProps(
+                        searchFieldProps: const TextFieldProps(
                           decoration: InputDecoration(
                             hintText: 'Search country...',
                             border: OutlineInputBorder(
@@ -364,20 +351,43 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                             ),
                           ),
                         ),
-                        constraints: BoxConstraints(maxHeight: 300),
+                        loadingBuilder: (context, _) {
+                          if (_countriesLoading) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                        emptyBuilder: (context, _) => const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: Text('No countries found')),
+                        ),
+                        itemBuilder: (context, country, isSelected) {
+                          return ListTile(
+                            leading: Text(country.flag ?? '',
+                                style: const TextStyle(fontSize: 24)),
+                            title: Text(country.name),
+                            selected: isSelected,
+                          );
+                        },
+                        constraints: const BoxConstraints(maxHeight: 300),
                       ),
                       dropdownDecoratorProps: DropDownDecoratorProps(
                         dropdownSearchDecoration: _inputDec('Country', Icons.public).copyWith(
                           suffixIcon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6C5CE7)),
                         ),
                       ),
-                      onChanged: (String? country) {
+                      onChanged: (csc.Country? country) {
                         setState(() {
                           _selectedCountry = country;
                           _selectedCity = null;
+                          _availableCities = [];
                         });
+                        if (country != null) _loadCitiesForCountry(country.isoCode);
                       },
-                      validator: (String? v) => v == null ? 'Required' : null,
+                      validator: (csc.Country? v) => v == null ? 'Required' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -385,7 +395,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                     child: DropdownSearch<String>(
                       selectedItem: _selectedCity,
                       items: _availableCities,
-                      enabled: _selectedCountry != null,
+                      enabled: _selectedCountry != null && _availableCities.isNotEmpty,
                       popupProps: const PopupProps.menu(
                         showSearchBox: true,
                         searchFieldProps: TextFieldProps(
@@ -411,6 +421,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Street address
               TextFormField(
                 controller: _addressCtrl,
                 decoration: _inputDec('Street Address', Icons.home_outlined),
@@ -498,6 +509,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     );
   }
 
+  // Helper Widgets
   InputDecoration _inputDec(String label, IconData icon) => InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF6C5CE7)),

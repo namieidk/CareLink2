@@ -10,7 +10,7 @@ class CaregiverHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Color(0xFFF8F9FA),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -18,21 +18,17 @@ class CaregiverHomeScreen extends StatelessWidget {
             SliverToBoxAdapter(
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF6C5CE7),
-                      Color(0xFF8B7FE8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
+                  color: Color(0xFFFAFBFC),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -45,7 +41,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                               Container(
                                 padding: EdgeInsets.all(2),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: Color(0xFFF5F6F7),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ClipRRect(
@@ -69,7 +65,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                                   Text(
                                     'Welcome back',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.9),
+                                      color: Colors.grey[600],
                                       fontSize: 13,
                                       fontWeight: FontWeight.w400,
                                     ),
@@ -78,7 +74,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                                   Text(
                                     'Maria Lopez',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: Colors.grey[900],
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -92,14 +88,14 @@ class CaregiverHomeScreen extends StatelessWidget {
                               Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Color(0xFFF5F6F7),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Stack(
                                   children: [
                                     Icon(
                                       Icons.notifications_outlined,
-                                      color: Colors.white,
+                                      color: Colors.grey[700],
                                       size: 28,
                                     ),
                                     Positioned(
@@ -109,10 +105,10 @@ class CaregiverHomeScreen extends StatelessWidget {
                                         width: 10,
                                         height: 10,
                                         decoration: BoxDecoration(
-                                          color: Color(0xFFFF6B6B),
+                                          color: Color(0xFF6C5CE7),
                                           shape: BoxShape.circle,
                                           border: Border.all(
-                                            color: Color(0xFF6C5CE7),
+                                            color: Colors.white,
                                             width: 1.5,
                                           ),
                                         ),
@@ -125,12 +121,12 @@ class CaregiverHomeScreen extends StatelessWidget {
                               Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Color(0xFFF5F6F7),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.menu,
-                                  color: Colors.white,
+                                  color: Colors.grey[700],
                                   size: 28,
                                 ),
                               ),
@@ -188,7 +184,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
+                          color: Colors.grey[900],
                         ),
                       ),
                       TextButton(
@@ -247,7 +243,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
+                      color: Colors.grey[900],
                     ),
                   ),
                   
@@ -296,7 +292,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
+                      color: Colors.grey[900],
                     ),
                   ),
                   
@@ -315,25 +311,21 @@ class CaregiverHomeScreen extends StatelessWidget {
                         icon: Icons.check_circle_outline,
                         title: 'Log\nMedication',
                         color: Color(0xFF4CAF50),
-                        gradient: [Color(0xFFD4F8E8), Color(0xFFB8F2D9)],
                       ),
                       _buildActionCard(
                         icon: Icons.add_alert_outlined,
                         title: 'Set\nReminder',
                         color: Color(0xFFFF6B6B),
-                        gradient: [Color(0xFFFFCFCF), Color(0xFFFFB8B8)],
                       ),
                       _buildActionCard(
                         icon: Icons.chat_bubble_outline,
                         title: 'Contact\nDoctor',
                         color: Color(0xFF42A5F5),
-                        gradient: [Color(0xFFD4E6F8), Color(0xFFB8D9F2)],
                       ),
                       _buildActionCard(
                         icon: Icons.description_outlined,
                         title: 'View\nReports',
                         color: Color(0xFFFFA726),
-                        gradient: [Color(0xFFFFE6C7), Color(0xFFFFD4AD)],
                       ),
                     ],
                   ),
@@ -346,7 +338,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
+                      color: Colors.grey[900],
                     ),
                   ),
                   
@@ -386,31 +378,43 @@ class CaregiverHomeScreen extends StatelessWidget {
     );
   }
 
-  // === ALL HELPER WIDGETS BELOW (UNCHANGED) ===
+  // === ALL HELPER WIDGETS BELOW ===
 
   Widget _buildQuickStat({
     required IconData icon,
     required String count,
     required String label,
   }) {
+    // Determine color based on label
+    Color iconColor;
+    if (label == 'My Patients') {
+      iconColor = Color(0xFF6C5CE7); // Purple
+    } else if (label == 'Due Today') {
+      iconColor = Color(0xFF4CAF50); // Green
+    } else if (label == 'Alerts') {
+      iconColor = Color(0xFFFF6B6B); // Red
+    } else {
+      iconColor = Colors.grey[700]!;
+    }
+    
     return Container(
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Color(0xFFF5F6F7),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
+          color: Color(0xFFE8EAED),
           width: 1,
         ),
       ),
       child: Column(
         children: [
-          Icon(icon, color: Colors.white, size: 24),
+          Icon(icon, color: iconColor, size: 24),
           SizedBox(height: 6),
           Text(
             count,
             style: TextStyle(
-              color: Colors.white,
+              color: Colors.grey[900],
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -419,7 +423,7 @@ class CaregiverHomeScreen extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.grey[600],
               fontSize: 11,
             ),
             textAlign: TextAlign.center,
@@ -438,17 +442,20 @@ class CaregiverHomeScreen extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Color(0xFFFDFDFE),
         borderRadius: BorderRadius.circular(16),
         border: isPending ? Border.all(
-          color: Color(0xFFFF6B6B),
-          width: 2,
-        ) : null,
+          color: Color(0xFFDFE1E6),
+          width: 1,
+        ) : Border.all(
+          color: Color(0xFFE8EAED),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -478,7 +485,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                     Icon(
                       Icons.access_time,
                       size: 14,
-                      color: Colors.grey[600],
+                      color: Colors.grey[500],
                     ),
                     SizedBox(width: 4),
                     Text(
@@ -494,13 +501,13 @@ class CaregiverHomeScreen extends StatelessWidget {
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Color(0xFFFF6B6B).withOpacity(0.1),
+                          color: Color(0xFFF0F1F3),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           'Pending',
                           style: TextStyle(
-                            color: Color(0xFFFF6B6B),
+                            color: Colors.grey[700],
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -514,7 +521,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+                    color: Colors.grey[900],
                   ),
                 ),
                 SizedBox(height: 4),
@@ -572,13 +579,17 @@ class CaregiverHomeScreen extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Color(0xFFFDFDFE),
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Color(0xFFE8EAED),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: Offset(0, 4),
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: Offset(0, 2),
             ),
           ],
         ),
@@ -588,7 +599,7 @@ class CaregiverHomeScreen extends StatelessWidget {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: Color(0xFFF5F6F7),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -609,7 +620,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
+                          color: Colors.grey[900],
                         ),
                       ),
                       SizedBox(width: 8),
@@ -681,21 +692,20 @@ class CaregiverHomeScreen extends StatelessWidget {
     required IconData icon,
     required String title,
     required Color color,
-    required List<Color> gradient,
   }) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: gradient,
-        ),
+        color: Color(0xFFFDFDFE),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Color(0xFFE8EAED),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -713,12 +723,12 @@ class CaregiverHomeScreen extends StatelessWidget {
                 Container(
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: color,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     icon,
-                    color: color,
+                    color: Colors.white,
                     size: 28,
                   ),
                 ),
@@ -727,7 +737,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+                    color: Colors.grey[900],
                     height: 1.3,
                   ),
                 ),
@@ -749,12 +759,16 @@ class CaregiverHomeScreen extends StatelessWidget {
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Color(0xFFFDFDFE),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Color(0xFFE8EAED),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
             offset: Offset(0, 2),
           ),
         ],
@@ -783,7 +797,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
+                    color: Colors.grey[900],
                   ),
                 ),
                 SizedBox(height: 4),
@@ -806,14 +820,13 @@ class CaregiverHomeScreen extends StatelessWidget {
   Widget _buildBottomNav(BuildContext context, int currentIndex) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, -5),
+        color: Color(0xFFFAFBFC),
+        border: Border(
+          top: BorderSide(
+            color: Color(0xFFE8EAED),
+            width: 1,
           ),
-        ],
+        ),
       ),
       child: SafeArea(
         child: Padding(

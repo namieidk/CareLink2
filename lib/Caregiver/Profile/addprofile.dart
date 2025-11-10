@@ -21,34 +21,27 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
   final _phoneController = TextEditingController();
   final _hourlyRateController = TextEditingController();
   final _availableHoursController = TextEditingController();
-  final _languageController = TextEditingController();
   final _experienceController = TextEditingController();
   final _licenseController = TextEditingController();
   final _educationController = TextEditingController();
   final _employmentController = TextEditingController();
   final _otherExpController = TextEditingController();
 
-  // Selected Skills & Certifications
-  List<String> _selectedSkills = [];
-  List<Map<String, dynamic>> _selectedCerts = []; // {name, image}
+  // Tag input controllers
+  final _languageInputController = TextEditingController();
+  final _skillsInputController = TextEditingController();
+
+  // Tags lists
+  final List<String> _languages = [];
+  final List<String> _skills = [];
+
+  // Selected Certifications
+  final List<Map<String, dynamic>> _selectedCerts = []; // {name, image}
 
   // Verification ID
   File? _idImage;
 
-  // All options
-  final List<String> _allSkills = [
-    'Medication Management',
-    'Mobility Assistance',
-    'Meal Preparation',
-    'Companionship',
-    'Personal Hygiene',
-    'Light Housekeeping',
-    'Dementia Care',
-    'Post-Surgery Care',
-    'Wound Care',
-    'Palliative Care',
-  ];
-
+  // All certifications options
   final List<String> _allCerts = [
     'CPR Certified',
     'First Aid',
@@ -69,12 +62,13 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
     _phoneController.dispose();
     _hourlyRateController.dispose();
     _availableHoursController.dispose();
-    _languageController.dispose();
     _experienceController.dispose();
     _licenseController.dispose();
     _educationController.dispose();
     _employmentController.dispose();
     _otherExpController.dispose();
+    _languageInputController.dispose();
+    _skillsInputController.dispose();
     super.dispose();
   }
 
@@ -87,6 +81,20 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
         return;
       }
 
+      if (_languages.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please add at least one language')),
+        );
+        return;
+      }
+
+      if (_skills.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please add at least one skill/service')),
+        );
+        return;
+      }
+
       final profileData = {
         'firstName': _firstNameController.text.trim(),
         'lastName': _lastNameController.text.trim(),
@@ -95,19 +103,51 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
         'phone': _phoneController.text.trim(),
         'hourlyRate': _hourlyRateController.text.trim(),
         'availableHours': _availableHoursController.text.trim(),
-        'language': _languageController.text.trim(),
+        'languages': _languages,
         'experienceYears': _experienceController.text.trim(),
         'license': _licenseController.text.trim(),
         'education': _educationController.text.trim(),
         'employmentHistory': _employmentController.text.trim(),
         'otherExperience': _otherExpController.text.trim(),
-        'skills': _selectedSkills,
+        'skills': _skills,
         'certifications': _selectedCerts,
         'verificationId': _idImage!.path,
       };
 
       Navigator.pop(context, profileData);
     }
+  }
+
+  void _addLanguage(String language) {
+    final trimmed = language.trim();
+    if (trimmed.isNotEmpty && !_languages.contains(trimmed)) {
+      setState(() {
+        _languages.add(trimmed);
+        _languageInputController.clear();
+      });
+    }
+  }
+
+  void _addSkill(String skill) {
+    final trimmed = skill.trim();
+    if (trimmed.isNotEmpty && !_skills.contains(trimmed)) {
+      setState(() {
+        _skills.add(trimmed);
+        _skillsInputController.clear();
+      });
+    }
+  }
+
+  void _removeLanguage(String language) {
+    setState(() {
+      _languages.remove(language);
+    });
+  }
+
+  void _removeSkill(String skill) {
+    setState(() {
+      _skills.remove(skill);
+    });
   }
 
   Future<void> _pickIdImage() async {
@@ -204,8 +244,72 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
                         Expanded(child: _buildTextField(controller: _availableHoursController, label: 'Available Hours/Week', icon: Icons.access_time, keyboardType: TextInputType.number, validator: (v) => v!.isEmpty ? 'Required' : null)),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(controller: _languageController, label: 'Languages Spoken', icon: Icons.language, validator: (v) => v!.isEmpty ? 'Required' : null),
+                    const SizedBox(height: 24),
+
+                    // === Languages Spoken ===
+                    const Text('Languages Spoken', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+                    Text('Press enter or comma to add', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_languages.isNotEmpty)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _languages.map((lang) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6C5CE7),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(lang, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                      const SizedBox(width: 6),
+                                      GestureDetector(
+                                        onTap: () => _removeLanguage(lang),
+                                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          if (_languages.isNotEmpty) const SizedBox(height: 8),
+                          TextField(
+                            controller: _languageInputController,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: 'e.g., English, Spanish, Tagalog',
+                              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                              border: InputBorder.none,
+                              prefixIcon: const Icon(Icons.language, color: Color(0xFF6C5CE7), size: 20),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                            ),
+                            onChanged: (value) {
+                              if (value.endsWith(',') || value.endsWith(' ')) {
+                                final lang = value.substring(0, value.length - 1).trim();
+                                if (lang.isNotEmpty) {
+                                  _addLanguage(lang);
+                                }
+                              }
+                            },
+                            onSubmitted: (value) => _addLanguage(value),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 24),
 
                     // === Professional Info ===
@@ -222,35 +326,106 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
                     _buildTextField(controller: _otherExpController, label: 'Other Experience', icon: Icons.more_horiz, maxLines: 3),
                     const SizedBox(height: 24),
 
-                    // === Skills (GREEN, NO CHECKMARK) ===
+                    // === Skills & Services ===
                     const Text('Skills & Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+                    Text('Add the services and skills you can provide', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                     const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_skills.isNotEmpty)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _skills.map((skill) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4CAF50),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(skill, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                                      const SizedBox(width: 6),
+                                      GestureDetector(
+                                        onTap: () => _removeSkill(skill),
+                                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          if (_skills.isNotEmpty) const SizedBox(height: 8),
+                          TextField(
+                            controller: _skillsInputController,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: 'e.g., Medication Management, Mobility Assistance',
+                              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                              border: InputBorder.none,
+                              prefixIcon: const Icon(Icons.medical_services, color: Color(0xFF4CAF50), size: 20),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                            ),
+                            onChanged: (value) {
+                              if (value.endsWith(',') || value.endsWith(' ')) {
+                                final skill = value.substring(0, value.length - 1).trim();
+                                if (skill.isNotEmpty) {
+                                  _addSkill(skill);
+                                }
+                              }
+                            },
+                            onSubmitted: (value) => _addSkill(value),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Quick add:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                    const SizedBox(height: 8),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _allSkills.map((skill) {
-                        final isSelected = _selectedSkills.contains(skill);
-                        return FilterChip(
-                          label: Text(skill),
-                          selected: isSelected,
-                          selectedColor: const Color(0xFF4CAF50), // GREEN
-                          checkmarkColor: Colors.transparent, // NO CHECKMARK
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey[700],
-                            fontWeight: FontWeight.w600,
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        'Medication Management',
+                        'Mobility Assistance',
+                        'Meal Preparation',
+                        'Companionship',
+                        'Personal Hygiene',
+                        'Light Housekeeping',
+                        'Dementia Care',
+                        'Post-Surgery Care',
+                        'Wound Care',
+                        'Palliative Care',
+                      ].map((suggestion) => GestureDetector(
+                        onTap: () => _addSkill(suggestion),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey[300]!),
                           ),
-                          backgroundColor: Colors.grey[200],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(color: isSelected ? const Color(0xFF4CAF50) : Colors.grey[300]!),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 14, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(suggestion, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                            ],
                           ),
-                          onSelected: (selected) {
-                            setState(() {
-                              selected ? _selectedSkills.add(skill) : _selectedSkills.remove(skill);
-                            });
-                          },
-                        );
-                      }).toList(),
+                        ),
+                      )).toList(),
                     ),
                     const SizedBox(height: 24),
 
@@ -316,7 +491,7 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
                               children: [
                                 const Text('Upload Valid ID', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 4),
-                                Text('Driver’s License, Passport, or National ID', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                Text('Drivers License, Passport, or National ID', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                               ],
                             ),
                           ),

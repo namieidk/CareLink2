@@ -1,8 +1,49 @@
 import 'package:flutter/material.dart';
 import 'Medication.dart';
 import 'Appointment.dart';
-import 'Home.dart'; // <-- Import your Home page
+import 'Home.dart';
+import 'Caregiver/message.dart'; // MessageScreen is here
 
+// -----------------------------------------------------------------------------
+// Caregiver Model
+// -----------------------------------------------------------------------------
+class Caregiver {
+  final String name;
+  final String photo;
+  final String specialty;
+  final int experience;
+  final double rating;
+  final int reviewCount;
+  final String phone;
+  final String email;
+  final String location;
+  final List<String> services;
+  final String availability;
+  final String workingHours;
+  final double hourlyRate;
+  final bool isVerified;
+
+  Caregiver({
+    required this.name,
+    required this.photo,
+    required this.specialty,
+    required this.experience,
+    required this.rating,
+    required this.reviewCount,
+    required this.phone,
+    required this.email,
+    required this.location,
+    required this.services,
+    required this.availability,
+    required this.workingHours,
+    required this.hourlyRate,
+    required this.isVerified,
+  });
+}
+
+// -----------------------------------------------------------------------------
+// PatientCaregiverScreen
+// -----------------------------------------------------------------------------
 class PatientCaregiverScreen extends StatefulWidget {
   const PatientCaregiverScreen({Key? key}) : super(key: key);
 
@@ -11,63 +52,314 @@ class PatientCaregiverScreen extends StatefulWidget {
 }
 
 class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
-  bool _hasAssignedCaregiver = true;
+  bool _hasAssignedCaregiver = false;
+  Caregiver? _selectedCaregiver;
+  String _selectedLocation = 'All Locations';
+  final TextEditingController _searchController = TextEditingController();
 
-  // Reusable Bottom Nav Item
+  final List<String> _locations = [
+    'All Locations',
+    'New York',
+    'Los Angeles',
+    'Chicago',
+    'Houston',
+    'Miami',
+    'Seattle',
+  ];
+
+  final List<Caregiver> _allCaregivers = [
+    Caregiver(
+      name: 'Maria Lopez',
+      photo: '',
+      specialty: 'Elderly Care Specialist',
+      experience: 5,
+      rating: 4.9,
+      reviewCount: 48,
+      phone: '+1 (555) 123-4567',
+      email: 'maria.lopez@care.com',
+      location: 'New York',
+      services: ['Medication Management', 'Health Monitoring', 'Meal Prep', 'Companionship'],
+      availability: 'Mon, Wed, Fri',
+      workingHours: '8:00 AM - 5:00 PM',
+      hourlyRate: 35.00,
+      isVerified: true,
+    ),
+    Caregiver(
+      name: 'James Carter',
+      photo: '',
+      specialty: 'Diabetes Care Expert',
+      experience: 8,
+      rating: 4.8,
+      reviewCount: 62,
+      phone: '+1 (555) 987-6543',
+      email: 'james.carter@care.com',
+      location: 'Los Angeles',
+      services: ['Glucose Monitoring', 'Diet Planning', 'Exercise Support', 'Insulin Admin'],
+      availability: 'Tue, Thu, Sat',
+      workingHours: '7:00 AM - 4:00 PM',
+      hourlyRate: 42.00,
+      isVerified: true,
+    ),
+    Caregiver(
+      name: 'Sarah Johnson',
+      photo: '',
+      specialty: 'Cardiology Nurse',
+      experience: 6,
+      rating: 4.7,
+      reviewCount: 35,
+      phone: '+1 (555) 456-7890',
+      email: 'sarah.j@care.com',
+      location: 'Chicago',
+      services: ['Heart Monitoring', 'BP Management', 'Medication Support', 'Emergency Response'],
+      availability: 'Mon, Tue, Wed',
+      workingHours: '9:00 AM - 6:00 PM',
+      hourlyRate: 38.00,
+      isVerified: true,
+    ),
+    Caregiver(
+      name: 'Michael Chen',
+      photo: '',
+      specialty: 'Physical Therapy Assistant',
+      experience: 4,
+      rating: 4.6,
+      reviewCount: 28,
+      phone: '+1 (555) 321-0987',
+      email: 'michael.chen@care.com',
+      location: 'Miami',
+      services: ['Mobility Training', 'Pain Relief', 'Rehab Exercises', 'Fall Prevention'],
+      availability: 'Wed, Thu, Fri',
+      workingHours: '10:00 AM - 7:00 PM',
+      hourlyRate: 32.00,
+      isVerified: true,
+    ),
+  ];
+
+  List<Caregiver> get _filteredCaregivers {
+    return _allCaregivers.where((c) {
+      final matchesLocation = _selectedLocation == 'All Locations' || c.location == _selectedLocation;
+      final matchesSearch = _searchController.text.isEmpty ||
+          c.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+          c.specialty.toLowerCase().contains(_searchController.text.toLowerCase());
+      return matchesLocation && matchesSearch;
+    }).toList();
+  }
+
+  // -------------------------------------------------------------------------
+  // Bottom navigation item
+  // -------------------------------------------------------------------------
   Widget _buildNavItem({
     required IconData icon,
     required String label,
     required bool isActive,
     required int index,
   }) {
+    final Color primary = const Color(0xFFFF6B6B);
     return Expanded(
       child: InkWell(
-        onTap: () {
-          if (isActive) return;
-
-          switch (index) {
-            case 0:
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const PatientHomePage()),
-              );
-              break;
-            case 1:
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const PatientMedicationScreen()),
-              );
-              break;
-            case 2:
-              break; // Already on Caregiver
-            case 3:
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const AppointmentPage()),
-              );
-              break;
-            case 4:
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const Placeholder()),
-              );
-              break;
-          }
-        },
+        onTap: isActive
+            ? null
+            : () {
+                switch (index) {
+                  case 0:
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientHomePage()));
+                    break;
+                  case 1:
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientMedicationScreen()));
+                    break;
+                  case 3:
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AppointmentPage()));
+                    break;
+                  case 4:
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Placeholder()));
+                    break;
+                }
+              },
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: isActive ? const Color(0xFFFF6B6B) : Colors.grey[400],
-                size: 26,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: isActive ? primary : Colors.grey[400], size: 26),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: isActive ? primary : Colors.grey[400],
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isActive ? const Color(0xFFFF6B6B) : Colors.grey[400],
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Bottom-sheet detail view
+  // -------------------------------------------------------------------------
+  void _showCaregiverDetails(Caregiver caregiver) {
+    final Color primary = const Color(0xFFFF6B6B);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.88,
+        maxChildSize: 0.95,
+        minChildSize: 0.6,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 50,
+                height: 5,
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(3)),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: controller,
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Profile
+                      Center(
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(colors: [Color(0xFFFF8A80), Color(0xFFFF6B6B)]),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.person, size: 56, color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(caregiver.name, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                if (caregiver.isVerified)
+                                  const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.verified, color: Color(0xFF4CAF50), size: 26)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(caregiver.specialty, style: const TextStyle(fontSize: 16, color: Colors.black54)),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.star, color: Color(0xFFFFA726), size: 22),
+                                const SizedBox(width: 6),
+                                Text('${caregiver.rating} (${caregiver.reviewCount} reviews)',
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      // Rate & Hours
+                      Row(
+                        children: [
+                          Expanded(child: _buildInfoCard(Icons.attach_money, 'Hourly Rate', '\$${caregiver.hourlyRate.toStringAsFixed(0)}', primary)),
+                          const SizedBox(width: 16),
+                          Expanded(child: _buildInfoCard(Icons.access_time, 'Working Hours', caregiver.workingHours, const Color(0xFF42A5F5))),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      // Contact
+                      const Text('Contact Information', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const SizedBox(height: 12),
+                      _buildDetailRow(Icons.phone, caregiver.phone, primary),
+                      const SizedBox(height: 10),
+                      _buildDetailRow(Icons.email, caregiver.email, primary),
+                      const SizedBox(height: 10),
+                      _buildDetailRow(Icons.location_on, caregiver.location, primary),
+                      const SizedBox(height: 28),
+                      // Availability
+                      const Text('Availability', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const SizedBox(height: 12),
+                      _buildAvailabilityChip(caregiver.availability, primary),
+                      const SizedBox(height: 28),
+                      // Services
+                      const Text('Services Offered', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: caregiver.services
+                            .map((s) => Chip(
+                                  label: Text(s, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                  backgroundColor: primary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 32),
+                      // Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context); // Close bottom sheet
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => MessageScreen(
+                                      caregiverName: caregiver.name,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.message, size: 18),
+                              label: const Text('Message', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: primary,
+                                side: BorderSide(color: primary, width: 2),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                setState(() {
+                                  _hasAssignedCaregiver = true;
+                                  _selectedCaregiver = caregiver;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${caregiver.name} is now your caregiver!'),
+                                    backgroundColor: const Color(0xFF4CAF50),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.check, size: 18),
+                              label: const Text('Assign Caregiver', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primary,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -77,604 +369,285 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Helper widgets
+  // -------------------------------------------------------------------------
+  Widget _buildInfoCard(IconData icon, String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String text, Color primary) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: primary),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.black87))),
+      ],
+    );
+  }
+
+  Widget _buildAvailabilityChip(String text, Color primary) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today, color: primary, size: 20),
+          const SizedBox(width: 10),
+          Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTag(IconData icon, String text, Color primary) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6F7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: primary),
+          const SizedBox(width: 4),
+          Text(text, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Build
+  // -------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final Color primary = const Color(0xFFFF6B6B);
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F9FA),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // Custom Header - SAME PINK GRADIENT AS HOME
-            SliverToBoxAdapter(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFFF9B9B), // Same as Home
-                      Color(0xFFFFB5B5), // Same as Home
+        child: Column(
+          children: [
+            // Header + Filters
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFFFAFBFC),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 3))],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientHomePage())),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(color: const Color(0xFFF5F6F7), borderRadius: BorderRadius.circular(14)),
+                          child: const Icon(Icons.arrow_back, size: 22),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Find a Caregiver', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black87)),
+                            Text('Trusted professionals near you', style: TextStyle(fontSize: 15, color: Colors.black54)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                      child: Row(
-                        children: [
-                          // BACK ARROW - NOW GOES TO HOME
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(builder: (_) => const PatientHomePage()),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedLocation,
+                          decoration: InputDecoration(
+                            labelText: 'Location',
+                            prefixIcon: Icon(Icons.location_on, color: primary),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            filled: true,
+                            fillColor: Colors.white,
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Text(
-                                  'My Caregiver',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Your care support team',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.more_vert,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ],
+                          items: _locations.map((loc) => DropdownMenuItem(value: loc, child: Text(loc))).toList(),
+                          onChanged: (val) => setState(() => _selectedLocation = val!),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            hintText: 'Search name or specialty...',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
-            // Content
-            SliverPadding(
-              padding: const EdgeInsets.all(20),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  if (_hasAssignedCaregiver) ...[
-                    // Primary Caregiver Card - Updated colors to match theme
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFFFFCFCF),
-                            Color(0xFFFFE0E0),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF9B9B).withOpacity(0.2),
-                            blurRadius: 15,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          children: [
-                            Row(
+            // Caregiver list – WHITE CARDS
+            Expanded(
+              child: _filteredCaregivers.isEmpty
+                  ? const Center(child: Text('No caregivers found.', style: TextStyle(fontSize: 16, color: Colors.grey)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: _filteredCaregivers.length,
+                      itemBuilder: (_, i) {
+                        final c = _filteredCaregivers[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 18),
+                          color: Colors.white,
+                          elevation: 6,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
                               children: [
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 76,
+                                      height: 76,
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(colors: [Color(0xFFFF8A80), Color(0xFFFF6B6B)]),
+                                        borderRadius: BorderRadius.all(Radius.circular(16)),
                                       ),
-                                    ],
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: Icon(
-                                      Icons.person,
-                                      size: 40,
-                                      color: Colors.grey[400],
+                                      child: const Icon(Icons.person, size: 38, color: Colors.white),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          'PRIMARY CAREGIVER',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: const Color(0xFFFF6B6B),
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Maria Lopez',
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.grey[800],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Icon(
-                                            Icons.verified,
-                                            size: 16,
-                                            color: Color(0xFF4CAF50),
+                                          Row(
+                                            children: [
+                                              Expanded(child: Text(c.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87))),
+                                              if (c.isVerified) const Icon(Icons.verified, color: Color(0xFF4CAF50), size: 22),
+                                            ],
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Certified • 5 years exp.',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.grey[700],
-                                            ),
+                                          Text(c.specialty, style: const TextStyle(color: Colors.black54)),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.star, size: 17, color: Color(0xFFFFA726)),
+                                              Text(' ${c.rating} (${c.reviewCount})', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                                              const Spacer(),
+                                              Text('\$${c.hourlyRate}/hr',
+                                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary)),
+                                            ],
                                           ),
                                         ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            Divider(color: Colors.white.withOpacity(0.5)),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildInfoChip(
-                                    Icons.phone,
-                                    '+63 912 345 6789',
-                                  ),
+                                const Divider(height: 32),
+                                Row(
+                                  children: [
+                                    _buildTag(Icons.location_on, c.location, primary),
+                                    const SizedBox(width: 12),
+                                    _buildTag(Icons.access_time, c.workingHours, primary),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildInfoChip(
-                                    Icons.email,
-                                    'maria.lopez@care.com',
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: () {},
-                                    icon: const Icon(Icons.call, size: 18),
-                                    label: const Text('Call'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFF6B6B),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => MessageScreen(
+                                                caregiverName: c.name,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.message),
+                                        label: const Text('Message'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: primary,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () {},
-                                    icon: const Icon(Icons.message, size: 18),
-                                    label: const Text('Message'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFFFF6B6B),
-                                      side: const BorderSide(color: Color(0xFFFF6B6B), width: 2),
-                                      backgroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () => _showCaregiverDetails(c),
+                                        icon: const Icon(Icons.arrow_forward),
+                                        label: const Text('View Details'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: primary,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Care Statistics - Updated colors
-                    Text(
-                      'Care Summary',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            icon: Icons.calendar_today,
-                            value: '142',
-                            label: 'Days of Care',
-                            color: const Color(0xFFFF6B6B),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            icon: Icons.medication,
-                            value: '98%',
-                            label: 'Adherence',
-                            color: const Color(0xFF4CAF50),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            icon: Icons.event_available,
-                            value: '24',
-                            label: 'Check-ins',
-                            color: const Color(0xFFFF6B6B),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            icon: Icons.star,
-                            value: '4.9',
-                            label: 'Rating',
-                            color: const Color(0xFFFFA726),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Services Provided
-                    Text(
-                      'Services Provided',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildServiceItem(
-                      icon: Icons.medication_outlined,
-                      title: 'Medication Management',
-                      description: 'Daily medication reminders and administration',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    _buildServiceItem(
-                      icon: Icons.monitor_heart_outlined,
-                      title: 'Health Monitoring',
-                      description: 'Regular vital signs checks and health tracking',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    _buildServiceItem(
-                      icon: Icons.restaurant_outlined,
-                      title: 'Meal Assistance',
-                      description: 'Meal preparation and dietary support',
-                      color: const Color(0xFFFFA726),
-                    ),
-
-                    _buildServiceItem(
-                      icon: Icons.local_hospital_outlined,
-                      title: 'Doctor Coordination',
-                      description: 'Appointment scheduling and medical coordination',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Schedule
-                    Text(
-                      'Visit Schedule',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildScheduleCard(
-                      day: 'Monday',
-                      time: '8:00 AM - 12:00 PM',
-                      activities: ['Morning medication', 'Breakfast', 'Health check'],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _buildScheduleCard(
-                      day: 'Wednesday',
-                      time: '2:00 PM - 6:00 PM',
-                      activities: ['Afternoon medication', 'Vital signs monitoring', 'Exercise'],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _buildScheduleCard(
-                      day: 'Friday',
-                      time: '8:00 AM - 4:00 PM',
-                      activities: ['Full day care', 'Doctor appointment', 'Meal preparation'],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Recent Activity
-                    Text(
-                      'Recent Activity',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildActivityItem(
-                      icon: Icons.check_circle,
-                      title: 'Morning medication administered',
-                      time: '2 hours ago',
-                      color: const Color(0xFF4CAF50),
-                    ),
-
-                    _buildActivityItem(
-                      icon: Icons.favorite,
-                      title: 'Blood pressure checked - Normal',
-                      time: '4 hours ago',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    _buildActivityItem(
-                      icon: Icons.message,
-                      title: 'Check-in message sent',
-                      time: 'Yesterday',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    _buildActivityItem(
-                      icon: Icons.event,
-                      title: 'Doctor appointment scheduled',
-                      time: '2 days ago',
-                      color: const Color(0xFFFF6B6B),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Emergency Contact - Updated to match Home
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFCFCF), Color(0xFFFFE0E0)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-  color: const Color(0xFFFF6B6B),
-  width: 2,
-),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.emergency,
-                              color: Color(0xFFFF6B6B),
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Text(
-                                  'Emergency Contact',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFD63031),
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Available 24/7 for urgent needs',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFFD63031),
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(
-                            Icons.arrow_forward_ios,
-                            color: Color(0xFFFF6B6B),
-                            size: 18,
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  ] else ...[
-                    // No Caregiver Assigned
-                    Center(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 40),
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFCFCF).withOpacity(0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.personal_injury_outlined,
-                              size: 80,
-                              color: Color(0xFFFF6B6B),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'No Caregiver Assigned',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 40),
-                            child: Text(
-                              'You don\'t have a caregiver assigned yet. Request one to get personalized care support.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey[600],
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          ElevatedButton.icon(
-                            onPressed: () {},
-                            icon: const Icon(Icons.add),
-                            label: const Text('Request a Caregiver'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF6B6B),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 20),
-                ]),
-              ),
             ),
           ],
         ),
       ),
 
-      // Bottom Navigation Bar - SAME AS HOME
+      // Bottom navigation
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 10,
-              offset: Offset(0, -5),
-            ),
-          ],
+          color: Color(0xFFFAFBFC),
+          border: Border(top: BorderSide(color: Color(0xFFE8EAED))),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(icon: Icons.home, label: 'Home', isActive: false, index: 0),
                 _buildNavItem(icon: Icons.medication, label: 'Medication', isActive: false, index: 1),
@@ -685,290 +658,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // Reusable widgets (unchanged but colors updated)
-  Widget _buildInfoChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: const Color(0xFFFF6B6B)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[800],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard({
-    required IconData icon,
-    required String value,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildServiceItem({
-    required IconData icon,
-    required String title,
-    required String description,
-    required Color color,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScheduleCard({
-    required String day,
-    required String time,
-    required List<String> activities,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF6B6B).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.calendar_today,
-                  size: 20,
-                  color: Color(0xFFFF6B6B),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    day,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    time,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          ...activities.map((activity) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_outline,
-                  size: 16,
-                  color: Color(0xFF4CAF50),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  activity,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ],
-            ),
-          )).toList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityItem({
-    required IconData icon,
-    required String title,
-    required String time,
-    required Color color,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
