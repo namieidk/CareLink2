@@ -9,7 +9,7 @@ class MessageScreen extends StatefulWidget {
   final String caregiverPhoto;
 
   const MessageScreen({
-    super.key,                     // forward key to super
+    super.key,                     
     required this.caregiverName,
     this.caregiverPhoto = '',
   });
