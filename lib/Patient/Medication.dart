@@ -3,10 +3,13 @@ import 'Home.dart';
 import 'Appointment.dart';
 import 'Caregiver.dart';
 import 'Profile.dart';
+import 'Medication/AddMed.dart'; // AddMed.dart
 
 class PatientMedicationScreen extends StatefulWidget {
   const PatientMedicationScreen({Key? key}) : super(key: key);
-  @override State<PatientMedicationScreen> createState() => _PatientMedicationScreenState();
+
+  @override
+  State<PatientMedicationScreen> createState() => _PatientMedicationScreenState();
 
   static const Color primary = Color(0xFFFF6B6B);
   static const Color success = Color(0xFF4CAF50);
@@ -24,12 +27,14 @@ class _PatientMedicationScreenState extends State<PatientMedicationScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  @override void initState() {
+  @override
+  void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
   }
 
-  @override void dispose() {
+  @override
+  void dispose() {
     _tabController.dispose();
     super.dispose();
   }
@@ -189,16 +194,21 @@ class _PatientMedicationScreenState extends State<PatientMedicationScreen>
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddMedicationScreen()),
+          );
+        },
         backgroundColor: PatientMedicationScreen.primary,
         icon: const Icon(Icons.add),
         label: const Text('Add Medication', style: TextStyle(fontWeight: FontWeight.w600)),
       ),
-      bottomNavigationBar: _buildBottomNav(context, 1), // Meds active
+      bottomNavigationBar: _buildBottomNav(context, 1),
     );
   }
 
-  // === REST OF YOUR ORIGINAL CODE (statCard, todayTab, etc.) ===
+  // === REST OF YOUR ORIGINAL CODE (unchanged) ===
   Widget _statCard(IconData icon, String value, String label, Color color) {
     return Container(
       padding: const EdgeInsets.all(PatientMedicationScreen.p3),
@@ -273,7 +283,18 @@ class _PatientMedicationScreenState extends State<PatientMedicationScreen>
     );
   }
 
-  Widget _medCard({required String name, required String dose, required String time, required String freq, required String purpose, required bool taken, required String instr, required String side, required Color color, required String doctor}) {
+  Widget _medCard({
+    required String name,
+    required String dose,
+    required String time,
+    required String freq,
+    required String purpose,
+    required bool taken,
+    required String instr,
+    required String side,
+    required Color color,
+    required String doctor,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: PatientMedicationScreen.p2),
       decoration: BoxDecoration(
@@ -522,7 +543,8 @@ class _StatItem extends StatelessWidget {
   final String value;
   final Color color;
   const _StatItem({required this.label, required this.value, required this.color});
-  @override Widget build(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
