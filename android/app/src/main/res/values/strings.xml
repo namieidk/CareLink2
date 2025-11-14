@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- REPLACE WITH YOUR WEB CLIENT ID FROM Firebase Console → Authentication → Sign-in method → Google -->
+    <string name="google_web_client_id">1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com</string>
+</resources>

@@ -25,6 +25,7 @@ class _SignInScreenState extends State<SignInScreen>
   bool _rememberMe = false;
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -104,7 +105,6 @@ class _SignInScreenState extends State<SignInScreen>
 
     Map<String, dynamic> result;
     try {
-      // Call the unified sign-in method
       result = await _auth.signInWithEmail(
         email: email,
         password: password,
@@ -117,7 +117,6 @@ class _SignInScreenState extends State<SignInScreen>
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      // Navigate based on the role returned from auth service
       final role = result['role'];
       
       if (role == 'Caregiver') {
@@ -141,6 +140,184 @@ class _SignInScreenState extends State<SignInScreen>
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    HapticFeedback.mediumImpact();
+    setState(() => _isGoogleLoading = true);
+
+    Map<String, dynamic> result;
+    try {
+      result = await _auth.signInWithGoogle();
+    } catch (e) {
+      result = {'success': false, 'error': 'Unexpected: $e'};
+    }
+
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+
+    if (result['success'] == true) {
+      final role = result['role'];
+      
+      if (role == 'Caregiver') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const CaregiverHomeScreen()),
+        );
+      } else if (role == 'Patient') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PatientHomePage()),
+        );
+      }
+    } else if (result['error'] == 'account_not_found') {
+      // Show dialog to choose role
+      _showRoleSelectionDialog(
+        uid: result['userId'],
+        email: result['email'],
+        displayName: result['displayName'],
+        photoUrl: result['photoUrl'],
+      );
+    } else {
+      final msg = (result['error'] ?? 'Login failed').toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    }
+  }
+
+  void _showRoleSelectionDialog({
+    required String uid,
+    required String email,
+    String? displayName,
+    String? photoUrl,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Choose Account Type',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'This is your first time signing in with Google.\nPlease select your account type:',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 24),
+            _buildRoleButton(
+              title: 'Patient',
+              icon: Icons.person,
+              color: const Color(0xFFFF8383),
+              onTap: () async {
+                Navigator.pop(context);
+                await _createGoogleAccount(
+                  uid: uid,
+                  email: email,
+                  role: 'Patient',
+                  displayName: displayName,
+                  photoUrl: photoUrl,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildRoleButton(
+              title: 'Caregiver',
+              icon: Icons.favorite,
+              color: const Color(0xFF64B5F6),
+              onTap: () async {
+                Navigator.pop(context);
+                await _createGoogleAccount(
+                  uid: uid,
+                  email: email,
+                  role: 'Caregiver',
+                  displayName: displayName,
+                  photoUrl: photoUrl,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRoleButton({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color, width: 2),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: TextStyle(
+                color: color,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createGoogleAccount({
+    required String uid,
+    required String email,
+    required String role,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    setState(() => _isGoogleLoading = true);
+
+    final result = await _auth.createGoogleAccount(
+      uid: uid,
+      email: email,
+      role: role,
+      displayName: displayName,
+      photoUrl: photoUrl,
+    );
+
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+
+    if (result['success'] == true) {
+      final accountRole = result['role'];
+      
+      if (accountRole == 'Caregiver') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const CaregiverHomeScreen()),
+        );
+      } else if (accountRole == 'Patient') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PatientHomePage()),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error'] ?? 'Failed to create account')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final Size size = MediaQuery.of(context).size;
@@ -155,7 +332,7 @@ class _SignInScreenState extends State<SignInScreen>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Original animated background
+          // Animated background
           Positioned.fill(
             child: AnimatedBuilder(
               animation: _floatingController,
@@ -329,7 +506,7 @@ class _SignInScreenState extends State<SignInScreen>
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _handleLogin,
+                              onPressed: _isLoading || _isGoogleLoading ? null : _handleLogin,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFF8383),
                                 foregroundColor: Colors.white,
@@ -354,6 +531,61 @@ class _SignInScreenState extends State<SignInScreen>
                                         letterSpacing: 0.5,
                                       ),
                                     ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Divider with "OR"
+                          Row(
+                            children: [
+                              const Expanded(child: Divider(color: Color(0xFFBDBDBD))),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Text(
+                                  'OR',
+                                  style: TextStyle(
+                                    color: const Color(0xFF9E9E9E),
+                                    fontSize: isWeb ? 14 : 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const Expanded(child: Divider(color: Color(0xFFBDBDBD))),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Google Sign-In Button
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _isLoading || _isGoogleLoading ? null : _handleGoogleSignIn,
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                side: const BorderSide(color: Color(0xFFBDBDBD), width: 1.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                              icon: _isGoogleLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                                    )
+                                  : Image.asset(
+                                      'assets/google_logo.png', // Make sure to add Google logo to assets
+                                      height: 24,
+                                      width: 24,
+                                    ),
+                              label: Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  fontSize: isWeb ? 18 : 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF424242),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -462,7 +694,7 @@ class _SignInScreenState extends State<SignInScreen>
 }
 
 // ===================================================================
-// ORIGINAL PAINTERS - 100% UNCHANGED
+// BACKGROUND PAINTERS - UNCHANGED
 // ===================================================================
 class ModernBackgroundPainter extends CustomPainter {
   final double animation;
@@ -617,46 +849,4 @@ class ModernBackgroundPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ModernBackgroundPainter oldDelegate) =>
       animation != oldDelegate.animation;
-}
-
-class CareLinkLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF888888)
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-    path.moveTo(size.width * 0.5, size.height * 0.35);
-    path.cubicTo(
-      size.width * 0.2,
-      size.height * 0.15,
-      size.width * 0.1,
-      size.height * 0.35,
-      size.width * 0.5,
-      size.height * 0.75,
-    );
-    path.moveTo(size.width * 0.5, size.height * 0.35);
-    path.cubicTo(
-      size.width * 0.8,
-      size.height * 0.15,
-      size.width * 0.9,
-      size.height * 0.35,
-      size.width * 0.5,
-      size.height * 0.75,
-    );
-    canvas.drawPath(path, paint);
-
-    final housePath = Path();
-    housePath.moveTo(size.width * 0.7, size.height * 0.25);
-    housePath.lineTo(size.width * 0.85, size.height * 0.15);
-    housePath.lineTo(size.width * 0.92, size.height * 0.2);
-    housePath.lineTo(size.width * 0.92, size.height * 0.28);
-    housePath.lineTo(size.width * 0.7, size.height * 0.35);
-    housePath.close();
-    canvas.drawPath(housePath, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

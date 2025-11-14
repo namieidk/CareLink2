@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'models/patient.dart';
 import 'models/doctor.dart';
 import 'models/caregiver.dart';
@@ -9,26 +11,47 @@ class AuthService {
   final auth.FirebaseAuth _firebaseAuth = auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ──────────────────────────────────────────────
+  // GOOGLE SIGN IN (Web + Mobile Safe)
+  // ──────────────────────────────────────────────
+  late final GoogleSignIn _googleSignIn;
+
+  AuthService() {
+  if (kIsWeb) {
+    _googleSignIn = GoogleSignIn(
+      clientId: const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'),
+    );
+  } else {
+    _googleSignIn = GoogleSignIn(); // ← Critical: No clientId
+  }
+}
   auth.User? get currentUser => _firebaseAuth.currentUser;
   Stream<auth.User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   // ──────────────────────────────────────────────
-  // UNIFIED EMAIL SIGN IN (for Patient & Caregiver)
+  // GOOGLE SIGN IN
   // ──────────────────────────────────────────────
-  Future<Map<String, dynamic>> signInWithEmail({
-    required String email,
-    required String password,
-  }) async {
+  Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
-      // Sign in with Firebase Auth
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
+      // Trigger the Google Sign-In flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      if (googleUser == null) {
+        return {'success': false, 'error': 'Sign in cancelled'};
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final credential = auth.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
 
-      final uid = credential.user!.uid;
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      final uid = userCredential.user!.uid;
+      final email = userCredential.user!.email!;
 
-      // Check if user is a Patient
+      // Check Patient
       final patientDoc = await Patient.collection.doc(uid).get();
       if (patientDoc.exists) {
         final data = patientDoc.data() as Map<String, dynamic>;
@@ -41,11 +64,161 @@ class AuthService {
         };
       }
 
-      // Check if user is a Caregiver
+      // Check Caregiver
       final caregiverDoc = await Caregiver.collection.doc(uid).get();
       if (caregiverDoc.exists) {
         final data = caregiverDoc.data() as Map<String, dynamic>;
-        
+
+        if (data['isActive'] == false) {
+          await _firebaseAuth.signOut();
+          await _googleSignIn.signOut();
+          return {'success': false, 'error': 'Account is deactivated'};
+        }
+
+        await Caregiver.collection.doc(uid)
+            .update({'lastLogin': FieldValue.serverTimestamp()});
+
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Caregiver',
+          'message': 'Caregiver login successful'
+        };
+      }
+
+      // New user → ask to choose role
+      return {
+        'success': false,
+        'error': 'account_not_found',
+        'userId': uid,
+        'email': email,
+        'displayName': userCredential.user!.displayName,
+        'photoUrl': userCredential.user!.photoURL,
+      };
+    } on auth.FirebaseAuthException catch (e) {
+      await _googleSignIn.signOut();
+      return {'success': false, 'error': _getAuthErrorMessage(e)};
+    } catch (e) {
+      await _googleSignIn.signOut();
+      return {'success': false, 'error': 'Unexpected error: $e'};
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // CREATE ACCOUNT AFTER GOOGLE SIGN IN
+  // ──────────────────────────────────────────────
+  Future<Map<String, dynamic>> createGoogleAccount({
+    required String uid,
+    required String email,
+    required String role,
+    String? displayName,
+    String? photoUrl,
+    String? phone,
+  }) async {
+    try {
+      if (role == 'Patient') {
+        final patient = Patient(
+          id: uid,
+          email: email,
+          phone: phone ?? '',
+          password: '',
+          fullName: displayName,
+        );
+
+        final data = patient.toMap()
+          ..['email_lower'] = email.toLowerCase()
+          ..['signInMethod'] = 'google'
+          ..['photoUrl'] = photoUrl;
+
+        await Patient.collection.doc(uid).set(data);
+
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Patient',
+          'message': 'Patient account created successfully'
+        };
+      }
+
+      if (role == 'Caregiver') {
+        String username = email.split('@')[0].toLowerCase();
+        int counter = 1;
+        String finalUsername = username;
+
+        while (true) {
+          final existing = await Caregiver.collection
+              .where('username', isEqualTo: finalUsername)
+              .limit(1)
+              .get();
+          if (existing.docs.isEmpty) break;
+          finalUsername = '$username$counter';
+          counter++;
+        }
+
+        final caregiver = Caregiver(
+          id: uid,
+          email: email,
+          username: finalUsername,
+          password: '',
+          fullName: displayName,
+        );
+
+        final data = caregiver.toMap()
+          ..['email_lower'] = email.toLowerCase()
+          ..['username'] = finalUsername
+          ..['signInMethod'] = 'google'
+          ..['photoUrl'] = photoUrl;
+
+        await Caregiver.collection.doc(uid).set(data);
+
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Caregiver',
+          'message': 'Caregiver account created successfully'
+        };
+      }
+
+      return {'success': false, 'error': 'Invalid role'};
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to create account: $e'};
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // EMAIL SIGN IN (Patient & Caregiver)
+  // ──────────────────────────────────────────────
+  Future<Map<String, dynamic>> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final uid = credential.user!.uid;
+
+      final patientDoc = await Patient.collection.doc(uid).get();
+      if (patientDoc.exists) {
+        final data = patientDoc.data() as Map<String, dynamic>;
+        return {
+          'success': true,
+          'userId': uid,
+          'userData': data,
+          'role': 'Patient',
+          'message': 'Patient login successful'
+        };
+      }
+
+      final caregiverDoc = await Caregiver.collection.doc(uid).get();
+      if (caregiverDoc.exists) {
+        final data = caregiverDoc.data() as Map<String, dynamic>;
+
         if (data['isActive'] == false) {
           await _firebaseAuth.signOut();
           return {'success': false, 'error': 'Account is deactivated'};
@@ -63,10 +236,8 @@ class AuthService {
         };
       }
 
-      // If user exists in Firebase Auth but not in our collections
       await _firebaseAuth.signOut();
       return {'success': false, 'error': 'User data not found in database'};
-
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -75,7 +246,7 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // PATIENT SIGN UP
+  // PATIENT SIGN UP / SIGN IN
   // ──────────────────────────────────────────────
   Future<Map<String, dynamic>> signUpPatient({
     required String email,
@@ -129,7 +300,13 @@ class AuthService {
       }
 
       final data = doc.data()!;
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Patient', 'message': 'Login successful'};
+      return {
+        'success': true,
+        'userId': credential.user!.uid,
+        'userData': data,
+        'role': 'Patient',
+        'message': 'Login successful'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -138,13 +315,15 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // DOCTOR SIGN UP
+  // DOCTOR SIGN UP / SIGN IN
   // ──────────────────────────────────────────────
   Future<Map<String, dynamic>> signUpDoctor({
     required String doctorId,
     required String username,
     required String password,
-    String? fullName,
+   
+
+ String? fullName,
   }) async {
     try {
       final doctorIdLower = doctorId.trim().toLowerCase();
@@ -235,7 +414,13 @@ class AuthService {
       await Doctor.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Doctor', 'message': 'Login successful'};
+      return {
+        'success': true,
+        'userId': credential.user!.uid,
+        'userData': data,
+        'role': 'Doctor',
+        'message': 'Login successful'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -244,7 +429,7 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // CAREGIVER SIGN UP
+  // CAREGIVER SIGN UP / SIGN IN
   // ──────────────────────────────────────────────
   Future<Map<String, dynamic>> signUpCaregiver({
     required String email,
@@ -324,7 +509,13 @@ class AuthService {
       await Caregiver.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Caregiver', 'message': 'Login successful'};
+      return {
+        'success': true,
+        'userId': credential.user!.uid,
+        'userData': data,
+        'role': 'Caregiver',
+        'message': 'Login successful'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -377,6 +568,8 @@ class AuthService {
       return {'success': true, 'userId': admin.id, 'message': 'Admin account created successfully'};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
+    } catch (e) {
+      return {'success': false, 'error': 'Unexpected error: $e'};
     }
   }
 
@@ -410,7 +603,13 @@ class AuthService {
       await Admin.collection.doc(credential.user!.uid)
           .update({'lastLogin': FieldValue.serverTimestamp()});
 
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Admin', 'message': 'Login successful'};
+      return {
+        'success': true,
+        'userId': credential.user!.uid,
+        'userData': data,
+        'role': 'Admin',
+        'message': 'Login successful'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -421,7 +620,10 @@ class AuthService {
   // ──────────────────────────────────────────────
   // COMMON METHODS
   // ──────────────────────────────────────────────
-  Future<void> signOut() async => await _firebaseAuth.signOut();
+  Future<void> signOut() async {
+    await _firebaseAuth.signOut();
+    await _googleSignIn.signOut();
+  }
 
   Future<Map<String, dynamic>> resetPassword(String email) async {
     try {

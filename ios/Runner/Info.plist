@@ -45,5 +45,27 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- Google Sign-In Configuration -->
+	<!-- Google Sign-In Configuration -->
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeRole</key>
+    <string>Editor</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.googleusercontent.apps.702847166853-hgr3hmruh651t99d646hetfl7bf47j4c</string>
+    </array>
+  </dict>
+</array>
+
+<!-- Required for iOS 9+ -->
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <string>googlechrome</string>
+  <string>googlechromes</string>
+  <string>googlesignin</string>
+</array>
 </dict>
 </plist>
