@@ -41,6 +41,7 @@ dependencies:
   simple_textfield_tag: ^0.0.1
   country: ^6.0.2 
   flutter_country_utility: ^5.0.2
+  url_launcher: ^6.2.1
 
 
   # The following adds the Cupertino Icons font to your application.

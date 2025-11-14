@@ -7,14 +7,17 @@ class BookingModel {
   final String patientName;
   final String caregiverId;
   final String caregiverName;
-  final String interviewType; // "Video Call" or "In-Person"
+  final String interviewType;
   final Timestamp startTime;
   final int durationHours;
-  final double totalCost; // Always 0.0
+  final double totalCost;
   final String? notes;
-  final String? address; // Only for In-Person
-  final String status; // "pending", "accepted", "rejected"
+  final String? address;
+  final String? meetLink;          // ← added
+  final String status;             // "pending", "accepted", "rejected"
+  final String? requestedBy;       // ← NEW: 'patient' or 'caregiver'
   final Timestamp createdAt;
+  final Timestamp? respondedAt;    // ← added (when caregiver/patient responds)
 
   BookingModel({
     required this.id,
@@ -28,8 +31,11 @@ class BookingModel {
     this.totalCost = 0.0,
     this.notes,
     this.address,
+    this.meetLink,
     this.status = 'pending',
+    this.requestedBy,
     required this.createdAt,
+    this.respondedAt,
   });
 
   factory BookingModel.fromMap(Map<String, dynamic> map, String id) {
@@ -45,8 +51,11 @@ class BookingModel {
       totalCost: (map['totalCost'] ?? 0.0).toDouble(),
       notes: map['notes'],
       address: map['address'],
+      meetLink: map['meetLink'],
       status: map['status'] ?? 'pending',
+      requestedBy: map['requestedBy'],
       createdAt: map['createdAt'] ?? Timestamp.now(),
+      respondedAt: map['respondedAt'],
     );
   }
 
@@ -62,8 +71,11 @@ class BookingModel {
       'totalCost': totalCost,
       'notes': notes,
       'address': address,
+      'meetLink': meetLink,
       'status': status,
+      'requestedBy': requestedBy,
       'createdAt': createdAt,
+      if (respondedAt != null) 'respondedAt': respondedAt,
     };
   }
 }
