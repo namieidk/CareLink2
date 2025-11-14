@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'Home.dart';
 import 'Medication.dart';
@@ -9,6 +11,7 @@ import 'Appointment.dart';
 import 'Profile.dart';
 import '../shared/message.dart';
 import '../../models/caregiver_profile.dart';
+import '../../auth_service.dart';
 
 class PatientCaregiverScreen extends StatefulWidget {
   const PatientCaregiverScreen({super.key});
@@ -35,6 +38,12 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
   List<Map<String, dynamic>> _messageList = [];
   bool _isLoadingMessages = true;
   int _totalUnread = 0;
+  
+  List<Map<String, dynamic>> _bookingList = [];
+  bool _isLoadingBookings = true;
+  int _totalPendingBookings = 0;
+
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -50,6 +59,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     _loadPatientName();
     _loadCaregivers();
     _listenToMessages();
+    _listenToBookings();
     _searchController.addListener(() => setState(() {}));
   }
 
@@ -75,7 +85,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             final data = doc.data();
             final authUid = data['caregiverId'] as String?;
             if (authUid == null || authUid.isEmpty) {
-              debugPrint('⚠️ Skipping profile ${doc.id} - no caregiverId found');
+              debugPrint('Warning: Skipping profile ${doc.id} - no caregiverId found');
               return null;
             }
             return CaregiverProfile.fromMap(data, authUid);
@@ -109,35 +119,32 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
   }
 
   void _listenToMessages() {
-    debugPrint('🎧 Starting to listen for messages...');
+    debugPrint('Starting to listen for messages...');
     
     _firestore.collection('messages').snapshots().listen((snapshot) async {
-      debugPrint('📬 Messages collection snapshot received: ${snapshot.docs.length} chat documents');
+      debugPrint('Messages collection snapshot received: ${snapshot.docs.length} chat documents');
       
       List<Map<String, dynamic>> chats = [];
       int totalUnread = 0;
 
       for (var chatDoc in snapshot.docs) {
         final chatId = chatDoc.id;
-        debugPrint('   📂 Processing chat document: $chatId');
+        debugPrint('   Processing chat document: $chatId');
         
-        // Check if this chat involves the current user
         if (!chatId.contains(_currentUserId)) {
-          debugPrint('   ⏭️ Skipping - chat does not involve current user');
+          debugPrint('   Skipping - chat does not involve current user');
           continue;
         }
 
-        // Extract the other user's ID (caregiver)
         final ids = chatId.split('_');
         if (ids.length != 2) {
-          debugPrint('   ❌ Invalid chat ID format');
+          debugPrint('   Invalid chat ID format');
           continue;
         }
 
         final caregiverId = ids[0] == _currentUserId ? ids[1] : ids[0];
-        debugPrint('   👤 Caregiver ID: $caregiverId');
+        debugPrint('   Caregiver ID: $caregiverId');
 
-        // Query all caregiver profiles to find matching caregiverId
         final caregiverQuery = await _firestore
             .collection('caregiver_profile')
             .where('caregiverId', isEqualTo: caregiverId)
@@ -145,7 +152,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             .get();
 
         if (caregiverQuery.docs.isEmpty) {
-          debugPrint('   ❌ No caregiver profile found with caregiverId: $caregiverId');
+          debugPrint('   No caregiver profile found with caregiverId: $caregiverId');
           continue;
         }
 
@@ -154,9 +161,8 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         
         final caregiverName = '${cgData['firstName'] ?? 'Caregiver'} ${cgData['lastName'] ?? ''}'.trim();
         final caregiverPhoto = cgData['profilePhotoUrl'] as String? ?? '';
-        debugPrint('   ✅ Found caregiver: $caregiverName');
+        debugPrint('   Found caregiver: $caregiverName');
 
-        // Get the last message in this chat
         final lastMsgQuery = await _firestore
             .collection('messages')
             .doc(chatId)
@@ -166,7 +172,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             .get();
 
         if (lastMsgQuery.docs.isEmpty) {
-          debugPrint('   📭 No messages in this chat yet');
+          debugPrint('   No messages in this chat yet');
           continue;
         }
 
@@ -175,7 +181,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         final lastTime = msgData['timestamp'] as Timestamp?;
         final senderId = msgData['senderId'] as String?;
 
-        debugPrint('   💬 Last message: "$lastMessage" from $senderId');
+        debugPrint('   Last message: "$lastMessage" from $senderId');
 
         bool isUnread = false;
         if (senderId != null && 
@@ -183,7 +189,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             (msgData['isRead'] == null || msgData['isRead'] == false)) {
           isUnread = true;
           totalUnread++;
-          debugPrint('   🔴 Message is UNREAD');
+          debugPrint('   Message is UNREAD');
         }
 
         chats.add({
@@ -197,7 +203,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         });
       }
 
-      // Sort by most recent message
       chats.sort((a, b) {
         final t1 = a['lastTime'] as Timestamp?;
         final t2 = b['lastTime'] as Timestamp?;
@@ -206,7 +211,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         return t2.compareTo(t1);
       });
 
-      debugPrint('📋 Final result: ${chats.length} chats, $totalUnread unread messages');
+      debugPrint('Final result: ${chats.length} chats, $totalUnread unread messages');
 
       if (mounted) {
         setState(() {
@@ -216,9 +221,65 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         });
       }
     }, onError: (e) {
-      debugPrint('❌ Stream error: $e');
+      debugPrint('Stream error: $e');
       if (mounted) {
         setState(() => _isLoadingMessages = false);
+      }
+    });
+  }
+
+  void _listenToBookings() {
+    debugPrint('Starting to listen for bookings...');
+    
+    // FIXED: Changed from 'patientId' to 'caregiverId' to show bookings FROM caregivers
+    _firestore
+        .collection('bookings')
+        .where('caregiverId', isEqualTo: _currentUserId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snapshot) {
+      debugPrint('Bookings snapshot received: ${snapshot.docs.length} pending bookings from caregivers');
+      
+      List<Map<String, dynamic>> bookings = [];
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        bookings.add({
+          'id': doc.id,
+          'caregiverName': data['caregiverName'] ?? 'Unknown',
+          'patientName': data['patientName'] ?? 'Unknown Patient',
+          'interviewType': data['interviewType'] ?? 'Video Call',
+          'startTime': data['startTime'] as Timestamp?,
+          'durationHours': data['durationHours'] ?? 1,
+          'meetLink': data['meetLink'],
+          'address': data['address'],
+          'notes': data['notes'] ?? '',
+          'createdAt': data['createdAt'] as Timestamp?,
+        });
+      }
+      
+      // Sort by creation time (newest first)
+      bookings.sort((a, b) {
+        final t1 = a['createdAt'] as Timestamp?;
+        final t2 = b['createdAt'] as Timestamp?;
+        if (t1 == null) return 1;
+        if (t2 == null) return -1;
+        return t2.compareTo(t1);
+      });
+      
+      debugPrint('Processed ${bookings.length} pending bookings from caregivers');
+      
+      if (mounted) {
+        setState(() {
+          _bookingList = bookings;
+          _totalPendingBookings = bookings.length;
+          _isLoadingBookings = false;
+        });
+      }
+    }, onError: (e) {
+      debugPrint('Booking stream error: $e');
+      if (mounted) {
+        setState(() => _isLoadingBookings = false);
       }
     });
   }
@@ -233,6 +294,283 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
       final bio = c.bio.toLowerCase().contains(query);
       return name.contains(query) || skills || bio;
     }).toList();
+  }
+
+  void _showBookingsInbox() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          children: [
+            _buildBottomSheetHeader(
+              'Booking Requests from Caregivers',
+              _totalPendingBookings > 0 
+                  ? '$_totalPendingBookings pending' 
+                  : 'No pending requests',
+              Icons.notifications_active,
+              purple,
+            ),
+            Expanded(
+              child: _isLoadingBookings
+                  ? const Center(
+                      child: CircularProgressIndicator(color: purple),
+                    )
+                  : _bookingList.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.event_available, 
+                                size: 64, 
+                                color: Colors.grey[300],
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No booking requests',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Booking requests from caregivers will appear here',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: _bookingList.length,
+                          itemBuilder: (_, i) {
+                            final booking = _bookingList[i];
+                            return _buildBookingCard(booking);
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookingCard(Map<String, dynamic> booking) {
+    final startTime = booking['startTime'] as Timestamp?;
+    final dateTime = startTime?.toDate();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: purple.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  booking['interviewType'] == 'Video Call' 
+                      ? Icons.videocam 
+                      : Icons.person_pin_circle,
+                  color: purple,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      booking['caregiverName'],
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      'Booking from: ${booking['patientName'] ?? 'Unknown'}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      booking['interviewType'],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (dateTime != null) ...[
+            _infoRow(
+              Icons.calendar_today,
+              DateFormat('MMM d, yyyy').format(dateTime),
+              color: purple,
+            ),
+            const SizedBox(height: 8),
+            _infoRow(
+              Icons.access_time,
+              '${DateFormat('h:mm a').format(dateTime)} (${booking['durationHours']}h)',
+              color: purple,
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (booking['meetLink'] != null) ...[
+            _infoRow(
+              Icons.link,
+              'Google Meet link included',
+              color: purple,
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (booking['address'] != null && booking['address'].toString().isNotEmpty) ...[
+            _infoRow(
+              Icons.location_on,
+              booking['address'],
+              color: purple,
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (booking['notes'].toString().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.note, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      booking['notes'],
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _handleBookingResponse(booking['id'], 'rejected'),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('Reject'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red, width: 1.5),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _handleBookingResponse(booking['id'], 'approved'),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Approve'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleBookingResponse(String bookingId, String status) async {
+    try {
+      await _firestore.collection('bookings').doc(bookingId).update({
+        'status': status,
+        'respondedAt': FieldValue.serverTimestamp(),
+      });
+      
+      Navigator.pop(context); // Close the modal
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'approved' 
+                ? 'Booking approved successfully!' 
+                : 'Booking rejected',
+          ),
+          backgroundColor: status == 'approved' ? Colors.green : Colors.orange,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error updating booking: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showMessagesInbox() {
@@ -586,9 +924,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                       Expanded(
                         child: _iconButton(
                           icon: Icons.notifications_active,
-                          badge: 3,
+                          badge: _totalPendingBookings,
                           color: purple,
-                          onTap: () {},
+                          onTap: _showBookingsInbox,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -682,6 +1020,365 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================
+  // BOOKING MODAL — IMPROVED ERROR HANDLING
+  // =========================================
+  void _showBookingModal(CaregiverProfile caregiver) {
+    final name = '${caregiver.firstName} ${caregiver.lastName}';
+    final rate = caregiver.hourlyRate;
+
+    String interviewType = 'Video Call';
+    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    int durationHours = 1;
+    final notesController = TextEditingController();
+    final addressController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              children: [
+                _buildBottomSheetHeader('Book $name', 'Interview & Schedule', Icons.calendar_today, pink),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Interview Type
+                        const Text('Interview Type', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _optionCard(
+                                'Video Call',
+                                Icons.videocam,
+                                interviewType == 'Video Call',
+                                () => setModalState(() => interviewType = 'Video Call'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _optionCard(
+                                'In-Person',
+                                Icons.person_pin_circle,
+                                interviewType == 'In-Person',
+                                () => setModalState(() => interviewType = 'In-Person'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Address Input (only for In-Person)
+                        if (interviewType == 'In-Person') ...[
+                          const Text('Address', style: TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: addressController,
+                            decoration: InputDecoration(
+                              hintText: 'Enter meeting address',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: pink, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // Date
+                        const Text('Date', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now().add(const Duration(days: 90)),
+                            );
+                            if (date != null) {
+                              setModalState(() => selectedDate = date);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: const Color(0xFFE8EAED)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today, color: pink),
+                                const SizedBox(width: 12),
+                                Text(
+                                  DateFormat('EEE, MMM d, yyyy').format(selectedDate),
+                                  style: const TextStyle(fontSize: 15),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Time
+                        const Text('Time', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () async {
+                            final time = await showTimePicker(
+                              context: context,
+                              initialTime: selectedTime,
+                            );
+                            if (time != null) {
+                              setModalState(() => selectedTime = time);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: const Color(0xFFE8EAED)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.access_time, color: pink),
+                                const SizedBox(width: 12),
+                                Text(
+                                  selectedTime.format(context),
+                                  style: const TextStyle(fontSize: 15),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Duration
+                        const Text('Duration', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: durationHours.toDouble(),
+                          min: 1,
+                          max: 8,
+                          divisions: 7,
+                          label: '$durationHours hour${durationHours > 1 ? 's' : ''}',
+                          activeColor: pink,
+                          onChanged: (val) {
+                            setModalState(() => durationHours = val.round());
+                          },
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Notes
+                        const Text('Notes (Optional)', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: notesController,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            hintText: 'Any special requirements?',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: pink, width: 2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Submit Button with loading state
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              if (interviewType == 'In-Person' && addressController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please enter an address for In-Person meeting'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final startDateTime = DateTime(
+                                selectedDate.year,
+                                selectedDate.month,
+                                selectedDate.day,
+                                selectedTime.hour,
+                                selectedTime.minute,
+                              );
+
+                              // Show loading dialog
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => const Center(
+                                  child: CircularProgressIndicator(color: pink),
+                                ),
+                              );
+
+                              String? meetLink;
+                              String? address;
+                              
+                              if (interviewType == 'Video Call') {
+                                debugPrint('🎥 Creating Google Meet link...');
+                                final link = await _authService.createGoogleMeetLink(
+                                  startTime: startDateTime,
+                                  durationMinutes: durationHours * 60,
+                                  summary: 'Interview with $_currentUserName',
+                                );
+                                
+                                // Close loading dialog
+                                Navigator.pop(context);
+                                
+                                if (link == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Google Calendar Permission Required',
+                                            style: TextStyle(fontWeight: FontWeight.bold),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Please sign in with Google and grant calendar access. Click "Advanced" if you see a verification warning.',
+                                            style: TextStyle(fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                      backgroundColor: Colors.orange,
+                                      duration: const Duration(seconds: 5),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                meetLink = link;
+                                debugPrint('✅ Meet link created: $meetLink');
+                              } else {
+                                // Close loading dialog for In-Person
+                                Navigator.pop(context);
+                                address = addressController.text.trim();
+                              }
+
+                              final bookingData = {
+                                'patientId': _currentUserId,
+                                'patientName': _currentUserName,
+                                'caregiverId': caregiver.id,
+                                'caregiverName': name,
+                                'interviewType': interviewType,
+                                'startTime': Timestamp.fromDate(startDateTime),
+                                'durationHours': durationHours,
+                                'notes': notesController.text.trim(),
+                                'status': 'pending',
+                                'createdAt': FieldValue.serverTimestamp(),
+                                'meetLink': meetLink,
+                                'address': address,
+                              };
+
+                              try {
+                                await _firestore.collection('bookings').add(bookingData);
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      interviewType == 'Video Call'
+                                          ? 'Booking sent! Meet link created.'
+                                          : 'Booking request sent!',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } catch (e) {
+                                debugPrint('❌ Booking error: $e');
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error creating booking: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: pink,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Send Booking Request',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _optionCard(String title, IconData icon, bool selected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected ? pink.withOpacity(0.1) : Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? pink : const Color(0xFFE8EAED),
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: selected ? pink : Colors.grey[600], size: 28),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                color: selected ? pink : Colors.grey[700],
+                fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -803,6 +1500,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
               const SizedBox(height: 8),
               _infoRow(Icons.email_outlined, c.email),
               const SizedBox(height: 8),
+              // FIXED: Changed from '\${c.hourlyRate}/hr' to actual value interpolation
               _infoRow(Icons.attach_money, '\$${c.hourlyRate}/hr'),
               const SizedBox(height: 8),
               _infoRow(Icons.access_time, '${c.availableHoursPerWeek} hrs/week'),
@@ -863,7 +1561,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {},
+                      onPressed: () => _showBookingModal(c),
                       icon: const Icon(Icons.work, size: 18),
                       label: const Text('Book'),
                       style: ElevatedButton.styleFrom(

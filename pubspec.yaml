@@ -49,6 +49,8 @@ dependencies:
   firebase_core: ^4.2.0
   firebase_auth: ^6.1.1
   google_sign_in: ^6.3.0
+  googleapis: ^13.0.0      # Official Google API package
+  googleapis_auth: ^1.6.0
   cloud_firestore: ^6.0.3
   firebase_storage: ^13.0.4
   path: ^1.8.3
