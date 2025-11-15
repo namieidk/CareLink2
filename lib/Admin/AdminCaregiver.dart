@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'AdminHome.dart';
 import 'AdminDoctor.dart';
 import 'AdminPatient.dart';
 import 'AdminProfile.dart';
-
-// Placeholder for Add Caregiver screen
-class AdminAddCaregiverScreen extends StatelessWidget {
-  const AdminAddCaregiverScreen({Key? key}) : super(key: key);
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text('Add New Caregiver Form Here')));
-}
+import '../models/caregiver_profile.dart'; // Import model
 
 class AdminCaregiversScreen extends StatefulWidget {
   const AdminCaregiversScreen({Key? key}) : super(key: key);
@@ -27,92 +22,37 @@ class _AdminCaregiversScreenState extends State<AdminCaregiversScreen> {
   String searchQuery = '';
   String selectedStatus = 'All';
 
-  final List<Map<String, String>> caregivers = const [
-    {
-      'name': 'Maria Santos',
-      'patients': '3',
-      'status': 'Active',
-      'email': 'maria.santos@care.com',
-      'phone': '+63 912 345 6789',
-      'joined': 'Jan 2024',
-      'rating': '4.9',
-    },
-    {
-      'name': 'Juan Cruz',
-      'patients': '5',
-      'status': 'Active',
-      'email': 'juan.cruz@care.com',
-      'phone': '+63 923 456 7890',
-      'joined': 'Mar 2023',
-      'rating': '4.8',
-    },
-    {
-      'name': 'Luzviminda Reyes',
-      'patients': '2',
-      'status': 'On Leave',
-      'email': 'luz.reyes@care.com',
-      'phone': '+63 934 567 8901',
-      'joined': 'Jul 2024',
-      'rating': '5.0',
-    },
-    {
-      'name': 'Pedro Garcia',
-      'patients': '4',
-      'status': 'Active',
-      'email': 'pedro.garcia@care.com',
-      'phone': '+63 945 678 9012',
-      'joined': 'Nov 2022',
-      'rating': '4.7',
-    },
-    {
-      'name': 'Ana Lim',
-      'patients': '6',
-      'status': 'Active',
-      'email': 'ana.lim@care.com',
-      'phone': '+63 956 789 0123',
-      'joined': 'May 2023',
-      'rating': '4.9',
-    },
-    {
-      'name': 'Carlos Tan',
-      'patients': '1',
-      'status': 'Inactive',
-      'email': 'carlos.tan@care.com',
-      'phone': '+63 967 890 1234',
-      'joined': 'Sep 2025',
-      'rating': '4.6',
-    },
-  ];
+  final List<String> statuses = ['All', 'Active', 'Inactive'];
 
-  late final List<String> statuses;
-
-  @override
-  void initState() {
-    super.initState();
-    final Set<String> stats = caregivers.map((c) => c['status']!).toSet();
-    statuses = ['All', ...stats];
+  String getInitials(String firstName, String lastName) {
+    return '${firstName.isNotEmpty ? firstName[0] : ''}${lastName.isNotEmpty ? lastName[0] : ''}'.toUpperCase();
   }
 
-  int get totalCaregivers => caregivers.length;
-  int get activeCaregivers => caregivers.where((c) => c['status'] == 'Active').length;
-  int get onLeaveCaregivers => caregivers.where((c) => c['status'] == 'On Leave').length;
-  int get inactiveCaregivers => caregivers.where((c) => c['status'] == 'Inactive').length;
+  Stream<List<CaregiverProfile>> getCaregiversStream() {
+    return FirebaseFirestore.instance
+        .collection('caregiver_profile')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => CaregiverProfile.fromMap(doc.data(), doc.id))
+          .toList();
+    });
+  }
 
-  List<Map<String, String>> get filteredCaregivers {
+  List<CaregiverProfile> filterCaregivers(List<CaregiverProfile> caregivers) {
     return caregivers.where((cg) {
-      final matchesSearch = cg['name']!.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          cg['email']!.toLowerCase().contains(searchQuery.toLowerCase());
+      final matchesSearch = '${cg.firstName} ${cg.lastName}'.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          cg.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          cg.skills.any((s) => s.toLowerCase().contains(searchQuery.toLowerCase()));
 
-      final matchesStatus = selectedStatus == 'All' || cg['status'] == selectedStatus;
+      final isActive = cg.availableHoursPerWeek > 0;
+      final matchesStatus = selectedStatus == 'All' ||
+          (selectedStatus == 'Active' && isActive) ||
+          (selectedStatus == 'Inactive' && !isActive);
 
       return matchesSearch && matchesStatus;
     }).toList();
-  }
-
-  String getInitials(String name) {
-    final parts = name.split(' ');
-    if (parts.length < 2) return '??';
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
   // === BOTTOM NAVIGATION (Caregiver tab active - index 2) ===
@@ -187,101 +127,123 @@ class _AdminCaregiversScreenState extends State<AdminCaregiversScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+              child: const Text(
+                'Manage Caregivers',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+            ),
+
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: StreamBuilder<List<CaregiverProfile>>(
+                stream: getCaregiversStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    );
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text('No caregivers found', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                    );
+                  }
+
+                  final allCaregivers = snapshot.data!;
+                  final filteredCaregivers = filterCaregivers(allCaregivers);
+                  final totalCaregivers = allCaregivers.length;
+                  final activeCaregivers = allCaregivers.where((c) => c.availableHoursPerWeek > 0).length;
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Manage Caregivers',
-                          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black87),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const AdminAddCaregiverScreen()),
-                            );
-                          },
-                          icon: const Icon(Icons.add, size: 20),
-                          label: const Text('New Caregiver'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        // === STATISTICS CARDS ===
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [BoxShadow(color: cardShadow, blurRadius: 12, offset: const Offset(0, 4))],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _statItem('Total', totalCaregivers.toString(), const Color(0xFF6EC1E4)),
+                              _statItem('Active', activeCaregivers.toString(), const Color(0xFF4CAF50)),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 24),
+
+                        Text('${filteredCaregivers.length} Caregivers', style: TextStyle(fontSize: 16, color: Colors.grey[700], fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 16),
+
+                        // Search Field
+                        TextField(
+                          onChanged: (val) => setState(() => searchQuery = val),
+                          decoration: InputDecoration(
+                            hintText: 'Search by name, email or skill...',
+                            prefixIcon: const Icon(Icons.search),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Status Dropdown
+                        DropdownButtonFormField<String>(
+                          value: selectedStatus,
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            prefixIcon: const Icon(Icons.verified_user),
+                          ),
+                          items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                          onChanged: (val) => setState(() => selectedStatus = val!),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Caregivers List
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredCaregivers.length,
+                          itemBuilder: (context, index) {
+                            final cg = filteredCaregivers[index];
+                            return _caregiverCard(cg);
+                          },
+                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
-                    const SizedBox(height: 12),
-
-                    // === STATISTICS IN HEADER ===
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: cardShadow, blurRadius: 12, offset: const Offset(0, 4))],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _statItem('Total', totalCaregivers.toString(), const Color(0xFF6EC1E4)),
-                          _statItem('Active', activeCaregivers.toString(), const Color(0xFF4CAF50)),
-                          _statItem('On Leave', onLeaveCaregivers.toString(), const Color(0xFFF4A261)),
-                          _statItem('Inactive', inactiveCaregivers.toString(), const Color(0xFFE57373)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    Text('${filteredCaregivers.length} Caregivers', style: TextStyle(fontSize: 16, color: Colors.grey[700])),
-                    const SizedBox(height: 20),
-
-                    // Status Dropdown
-                    DropdownButtonFormField<String>(
-                      value: selectedStatus,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                        prefixIcon: const Icon(Icons.verified_user),
-                      ),
-                      items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) => setState(() => selectedStatus = val!),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Search Field
-                    TextField(
-                      onChanged: (val) => setState(() => searchQuery = val),
-                      decoration: InputDecoration(
-                        hintText: 'Search by name or email...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Caregivers List
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: filteredCaregivers.length,
-                      itemBuilder: (context, index) {
-                        final cg = filteredCaregivers[index];
-                        return _caregiverCard(cg);
-                      },
-                    ),
-                    const SizedBox(height: 40),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ],
@@ -291,165 +253,195 @@ class _AdminCaregiversScreenState extends State<AdminCaregiversScreen> {
     );
   }
 
-  // === HEADER ===
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 30,
-            backgroundColor: primary,
-            child: Text(
-              'AD',
-              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Hello, Admin',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-                Text(
-                  'Caregiver Management',
-                  style: TextStyle(fontSize: 15, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined, size: 30),
-                onPressed: () {},
-              ),
-              const Positioned(
-                right: 10,
-                top: 10,
-                child: CircleAvatar(radius: 5, backgroundColor: Colors.red),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // === SMALL STAT ITEM IN HEADER ===
   Widget _statItem(String label, String value, Color color) {
     return Column(
       children: [
         Text(
           value,
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color),
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: color),
         ),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
         ),
       ],
     );
   }
 
-  // === CAREGIVER CARD ===
-  Widget _caregiverCard(Map<String, String> cg) {
-    final isActive = cg['status'] == 'Active';
-    final isOnLeave = cg['status'] == 'On Leave';
-    final statusColor = isActive
-        ? const Color(0xFF4CAF50)
-        : isOnLeave
-            ? const Color(0xFFF4A261)
-            : const Color(0xFFE57373);
+  Widget _caregiverCard(CaregiverProfile cg) {
+    final isActive = cg.availableHoursPerWeek > 0;
+    final statusColor = isActive ? const Color(0xFF4CAF50) : const Color(0xFFE57373);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: cardShadow, blurRadius: 12, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: cardShadow, blurRadius: 8, offset: const Offset(0, 2))],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 34,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: CircleAvatar(
+            radius: 28,
             backgroundColor: primary,
+            backgroundImage: cg.profilePhotoUrl != null && cg.profilePhotoUrl!.isNotEmpty
+                ? NetworkImage(cg.profilePhotoUrl!)
+                : null,
+            child: cg.profilePhotoUrl == null || cg.profilePhotoUrl!.isEmpty
+                ? Text(
+                    getInitials(cg.firstName, cg.lastName),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  )
+                : null,
+          ),
+          title: Text(
+            '${cg.firstName} ${cg.lastName}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            '${cg.experienceYears} yrs • ${cg.skills.isNotEmpty ? cg.skills.take(2).join(", ") : "No skills"}',
+            style: const TextStyle(fontSize: 13, color: muted),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Text(
-              getInitials(cg['name']!),
-              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              isActive ? 'Active' : 'Inactive',
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 12),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(cg['name']!, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        cg['status']!,
-                        style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
+          children: [
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            _infoRow(Icons.email_outlined, cg.email),
+            _infoRow(Icons.phone_outlined, cg.phone),
+            _infoRow(Icons.attach_money, '₱${cg.hourlyRate}/hr'),
+            _infoRow(Icons.access_time, '${cg.availableHoursPerWeek} hrs/week'),
+            _infoRow(Icons.school, cg.education),
+            if (cg.skills.isNotEmpty)
+              _infoRow(Icons.handyman, 'Skills: ${cg.skills.join(", ")}'),
+            if (cg.certifications.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Certifications:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+              ),
+              ...cg.certifications.map((cert) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: _infoRow(
+                      Icons.verified,
+                      '${cert.name}',
+                      trailing: cert.imageUrl.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.network(cert.imageUrl, width: 24, height: 24, fit: BoxFit.cover),
+                            )
+                          : null,
                     ),
-                  ],
+                  )),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Joined: ${_formatDate(cg.createdAt)}',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
-                const SizedBox(height: 6),
-                Text('Managing ${cg['patients']} patients', style: TextStyle(fontSize: 15, color: primary, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 12),
-                _infoRow(Icons.email_outlined, cg['email']!),
-                _infoRow(Icons.phone_outlined, cg['phone']!),
-                _infoRow(Icons.calendar_today, 'Joined ${cg['joined']}'),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 22),
-                    const SizedBox(width: 4),
-                    Text('${cg['rating']} (89 reviews)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                const Spacer(),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: muted, size: 20),
+                  onSelected: (value) {
+                    if (value == 'view') {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('View caregiver profile - coming soon')));
+                    } else if (value == 'edit') {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Edit caregiver - coming soon')));
+                    } else if (value == 'delete') {
+                      _confirmDelete(cg);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'view', child: Text('View Profile')),
+                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                   ],
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: muted),
-            onSelected: (value) {
-              if (value == 'edit') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Edit caregiver - coming soon')));
-              } else if (value == 'delete') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delete caregiver - coming soon')));
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-            ],
-          ),
+          if (trailing != null) trailing,
         ],
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: muted),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: Colors.grey[700]), overflow: TextOverflow.ellipsis)),
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  void _confirmDelete(CaregiverProfile caregiver) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Caregiver'),
+        content: Text('Are you sure you want to delete ${caregiver.firstName} ${caregiver.lastName}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await FirebaseFirestore.instance
+                    .collection('caregiver_profile')
+                    .doc(caregiver.id)
+                    .delete();
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Caregiver deleted successfully')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error deleting caregiver: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
