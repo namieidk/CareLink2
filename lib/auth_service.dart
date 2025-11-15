@@ -170,6 +170,18 @@ class AuthService {
         return {'success': true, 'userId': uid, 'userData': data, 'role': 'Patient'};
       }
       
+      // Check Doctor
+      final doctorDoc = await Doctor.collection.doc(uid).get();
+      if (doctorDoc.exists) {
+        final data = doctorDoc.data() as Map<String, dynamic>;
+        if (data['isActive'] == false) {
+          await _firebaseAuth.signOut();
+          return {'success': false, 'error': 'Account is deactivated'};
+        }
+        await Doctor.collection.doc(uid).update({'lastLogin': FieldValue.serverTimestamp()});
+        return {'success': true, 'userId': uid, 'userData': data, 'role': 'Doctor'};
+      }
+      
       // Check Caregiver
       final caregiverDoc = await Caregiver.collection.doc(uid).get();
       if (caregiverDoc.exists) {
@@ -239,23 +251,72 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // DOCTOR SIGN UP / SIGN IN
+  // DOCTOR SIGN UP / SIGN IN (EMAIL-BASED)
   // ──────────────────────────────────────────────
-  Future<Map<String, dynamic>> signUpDoctor({required String doctorId, required String username, required String password, String? fullName}) async {
+  
+  /// Admin creates doctor account with email, username, and password
+  Future<Map<String, dynamic>> createDoctorAccount({
+    required String email,
+    required String username,
+    required String password,
+    String? fullName,
+  }) async {
     try {
-      final doctorIdLower = doctorId.trim().toLowerCase();
       final usernameLower = username.trim().toLowerCase();
-      final existingDoctor = await Doctor.collection.where('doctorId', isEqualTo: doctorIdLower).limit(1).get();
-      if (existingDoctor.docs.isNotEmpty) return {'success': false, 'error': 'Doctor ID already exists'};
-      final existingUsername = await Doctor.collection.where('username', isEqualTo: usernameLower).limit(1).get();
-      if (existingUsername.docs.isNotEmpty) return {'success': false, 'error': 'Username already taken'};
-      final tempEmail = '$doctorIdLower@carelink.temp';
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(email: tempEmail, password: password);
-      final doctor = Doctor(id: credential.user!.uid, doctorId: doctorId.trim(), username: username.trim(), password: password, fullName: fullName);
-      final data = doctor.toMap()..['doctorId'] = doctorIdLower..['username'] = usernameLower;
+      
+      // Check if username already exists
+      final existingUsername = await Doctor.collection
+          .where('username', isEqualTo: usernameLower)
+          .limit(1)
+          .get();
+      if (existingUsername.docs.isNotEmpty) {
+        return {'success': false, 'error': 'Username already taken'};
+      }
+
+      // Check if email already exists
+      final existingEmail = await Doctor.collection
+          .where('email_lower', isEqualTo: email.trim().toLowerCase())
+          .limit(1)
+          .get();
+      if (existingEmail.docs.isNotEmpty) {
+        return {'success': false, 'error': 'Email already registered'};
+      }
+
+      // Create Firebase Auth account
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      // Generate unique doctorId (you can customize this format)
+      final doctorId = 'DOC${DateTime.now().millisecondsSinceEpoch}';
+
+      // Create Doctor document in Firestore
+      final doctor = Doctor(
+        id: credential.user!.uid,
+        doctorId: doctorId,
+        username: username.trim(),
+        email: email.trim(),
+        password: password,
+        fullName: fullName,
+      );
+
+      final data = doctor.toMap()
+        ..['email_lower'] = email.trim().toLowerCase()
+        ..['username'] = usernameLower;
+
       await Doctor.collection.doc(doctor.id).set(data);
-      if (fullName != null && fullName.isNotEmpty) await credential.user!.updateDisplayName(fullName);
-      return {'success': true, 'userId': doctor.id};
+
+      if (fullName != null && fullName.isNotEmpty) {
+        await credential.user!.updateDisplayName(fullName);
+      }
+
+      return {
+        'success': true,
+        'userId': doctor.id,
+        'doctorId': doctorId,
+        'message': 'Doctor account created successfully'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {
@@ -263,22 +324,45 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>> signInDoctor({required String identifier, required String password}) async {
+  /// Doctor signs in with email and password
+  Future<Map<String, dynamic>> signInDoctor({
+    required String email,
+    required String password,
+  }) async {
     try {
-      QuerySnapshot query = await Doctor.collection.where('doctorId', isEqualTo: identifier.trim().toLowerCase()).limit(1).get();
-      if (query.docs.isEmpty) {
-        query = await Doctor.collection.where('username', isEqualTo: identifier.trim().toLowerCase()).limit(1).get();
+      // Sign in with email and password
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      // Get doctor document
+      final doctorDoc = await Doctor.collection.doc(credential.user!.uid).get();
+
+      if (!doctorDoc.exists) {
+        await _firebaseAuth.signOut();
+        return {'success': false, 'error': 'Doctor account not found'};
       }
-      if (query.docs.isEmpty) return {'success': false, 'error': 'Invalid doctor ID or username'};
-      final data = query.docs.first.data() as Map<String, dynamic>;
-      final tempEmail = '${data['doctorId']}@carelink.temp';
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(email: tempEmail, password: password);
+
+      final data = doctorDoc.data() as Map<String, dynamic>;
+
+      // Check if account is active
       if (data['isActive'] == false) {
         await _firebaseAuth.signOut();
         return {'success': false, 'error': 'Account is deactivated'};
       }
-      await Doctor.collection.doc(credential.user!.uid).update({'lastLogin': FieldValue.serverTimestamp()});
-      return {'success': true, 'userId': credential.user!.uid, 'userData': data, 'role': 'Doctor'};
+
+      // Update last login
+      await Doctor.collection.doc(credential.user!.uid).update({
+        'lastLogin': FieldValue.serverTimestamp()
+      });
+
+      return {
+        'success': true,
+        'userId': credential.user!.uid,
+        'userData': data,
+        'role': 'Doctor'
+      };
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
     } catch (e) {

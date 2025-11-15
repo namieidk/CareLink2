@@ -6,7 +6,8 @@ import 'Signup.dart';
 import '../../auth_service.dart';
 import '../../Patient/Home.dart';
 import '../../Caregiver/Home.dart';
-import '../../Admin/AdminHome.dart'; // Add your admin home screen import
+import '../../Doctor/DocHome.dart'; // Add your doctor home screen import
+import '../../Admin/AdminHome.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({Key? key}) : super(key: key);
@@ -225,7 +226,7 @@ class _SignInScreenState extends State<SignInScreen>
 
     if (result['success'] == true) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AdminHomePage()), // Replace with your admin home
+        MaterialPageRoute(builder: (_) => const AdminHomePage()),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -287,9 +288,13 @@ class _SignInScreenState extends State<SignInScreen>
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PatientHomePage()),
         );
+      } else if (role == 'Doctor') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const DoctorHomePage()), // Replace with your doctor home
+        );
       } else if (role == 'Admin') {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminHomePage()), // Replace with your admin home
+          MaterialPageRoute(builder: (_) => const AdminHomePage()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
