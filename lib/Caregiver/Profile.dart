@@ -20,7 +20,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Theme colors
   static const Color primary = Color(0xFF6C5CE7);
   static const Color success = Color(0xFF4CAF50);
-  static const Color warning = Color(0xFFFF9800);
   static const Color danger = Color(0xFFE53935);
   static const Color text = Color(0xFF1F2937);
   static const Color textMuted = Color(0xFF6B7280);
