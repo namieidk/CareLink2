@@ -1,4 +1,3 @@
-// signup.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
@@ -33,6 +32,10 @@ class _SignUpScreenState extends State<SignUpScreen>
 
   String? _selectedUserType; // 'Patient' or 'Caregiver'
   final AuthService _auth = AuthService();
+
+  // Admin signup tracking
+  int _titleTapCount = 0;
+  DateTime? _lastTitleTap;
 
   @override
   void initState() {
@@ -75,6 +78,221 @@ class _SignUpScreenState extends State<SignUpScreen>
     _confirmPasswordController.dispose();
     super.dispose();
   }
+
+  void _onTitleTap() {
+    final now = DateTime.now();
+    if (_lastTitleTap != null && now.difference(_lastTitleTap!).inSeconds > 2) {
+      _titleTapCount = 0;
+    }
+    _lastTitleTap = now;
+    _titleTapCount++;
+
+    if (_titleTapCount >= 7) {
+      _titleTapCount = 0;
+      _checkAndShowAdminSignup();
+    }
+  }
+
+  Future<void> _checkAndShowAdminSignup() async {
+    // Check if admin already exists
+    final adminExists = await _auth.adminExists();
+    
+    if (adminExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin account already exists. Only one admin is allowed.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    _showAdminSignupDialog();
+  }
+
+  void _showAdminSignupDialog() {
+    final adminUsernameController = TextEditingController();
+    final adminEmailController = TextEditingController();
+    final adminPasswordController = TextEditingController();
+    final adminKeyController = TextEditingController();
+    final adminFullNameController = TextEditingController();
+    bool obscurePassword = true;
+    bool obscureKey = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: Colors.orange[700]),
+              const SizedBox(width: 12),
+              const Text(
+                'Admin Setup',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Create the first admin account. This can only be done once.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: adminFullNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminUsernameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    prefixIcon: Icon(Icons.account_circle),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminPasswordController,
+                  obscureText: obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          obscurePassword = !obscurePassword;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminKeyController,
+                  obscureText: obscureKey,
+                  decoration: InputDecoration(
+                    labelText: 'Admin Verification Key',
+                    prefixIcon: const Icon(Icons.vpn_key),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscureKey ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          obscureKey = !obscureKey;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Contact system administrator for verification key',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final username = adminUsernameController.text.trim();
+                final email = adminEmailController.text.trim();
+                final password = adminPasswordController.text.trim();
+                final key = adminKeyController.text.trim();
+                final fullName = adminFullNameController.text.trim();
+
+                if (username.isEmpty || email.isEmpty || password.isEmpty || key.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all required fields')),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                await _handleAdminSignup(username, email, password, key, fullName);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Create Admin'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAdminSignup(
+    String username,
+    String email,
+    String password,
+    String verificationKey,
+    String fullName,
+  ) async {
+    setState(() => _isLoading = true);
+
+    final result = await _auth.signUpAdmin(
+      username: username,
+      email: email,
+      password: password,
+      verificationKey: verificationKey,
+      fullName: fullName.isNotEmpty ? fullName : null,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin account created successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const SignInScreen()),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error'] ?? 'Failed to create admin account')),
+      );
+    }
+  }
+
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedUserType == null) {
@@ -214,11 +432,14 @@ class _SignUpScreenState extends State<SignUpScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Sign up',
-                              style: TextStyle(
-                                  fontSize: isWeb ? 42 : 36,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF424242))),
+                          GestureDetector(
+                            onTap: _onTitleTap,
+                            child: Text('Sign up',
+                                style: TextStyle(
+                                    fontSize: isWeb ? 42 : 36,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF424242))),
+                          ),
                           Container(
                             width: 60,
                             height: 4,
@@ -252,6 +473,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                             isWeb: isWeb,
                           ),
                           const SizedBox(height: 16),
+                          
                           // Phone (only for Patient)
                           if (_selectedUserType == 'Patient') ...[
                             _buildTextField(
@@ -573,7 +795,7 @@ class _SignUpScreenState extends State<SignUpScreen>
   }
 }
 
-// PAINTERS (unchanged)
+// PAINTERS
 class ModernBackgroundPainter extends CustomPainter {
   final double animation;
   ModernBackgroundPainter(this.animation);

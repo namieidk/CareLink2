@@ -6,6 +6,7 @@ import 'Signup.dart';
 import '../../auth_service.dart';
 import '../../Patient/Home.dart';
 import '../../Caregiver/Home.dart';
+import '../../Admin/AdminHome.dart'; // Add your admin home screen import
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({Key? key}) : super(key: key);
@@ -31,6 +32,10 @@ class _SignInScreenState extends State<SignInScreen>
   final _passwordController = TextEditingController();
 
   final AuthService _auth = AuthService();
+
+  // Admin access tracking
+  int _logoTapCount = 0;
+  DateTime? _lastLogoTap;
 
   @override
   void initState() {
@@ -72,6 +77,161 @@ class _SignInScreenState extends State<SignInScreen>
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onLogoTap() {
+    final now = DateTime.now();
+    if (_lastLogoTap != null && now.difference(_lastLogoTap!).inSeconds > 2) {
+      _logoTapCount = 0;
+    }
+    _lastLogoTap = now;
+    _logoTapCount++;
+
+    if (_logoTapCount >= 5) {
+      _logoTapCount = 0;
+      _showAdminAccessDialog();
+    }
+  }
+
+  void _showAdminAccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.admin_panel_settings, color: Colors.orange[700]),
+            const SizedBox(width: 12),
+            const Text(
+              'Admin Access',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Enter admin credentials to continue.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showAdminLoginDialog();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange[700],
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAdminLoginDialog() {
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool obscurePassword = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Admin Sign In',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.person),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscurePassword = !obscurePassword;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final username = usernameController.text.trim();
+                final password = passwordController.text.trim();
+
+                if (username.isEmpty || password.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all fields')),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                await _handleAdminLogin(username, password);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Sign In'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAdminLogin(String username, String password) async {
+    setState(() => _isLoading = true);
+
+    final result = await _auth.signInAdmin(
+      username: username,
+      password: password,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminHomePage()), // Replace with your admin home
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error'] ?? 'Admin login failed')),
+      );
+    }
   }
 
   String? _validateEmail(String? value) {
@@ -127,6 +287,10 @@ class _SignInScreenState extends State<SignInScreen>
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PatientHomePage()),
         );
+      } else if (role == 'Admin') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AdminHomePage()), // Replace with your admin home
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unknown user type')),
@@ -167,7 +331,6 @@ class _SignInScreenState extends State<SignInScreen>
         );
       }
     } else if (result['error'] == 'account_not_found') {
-      // Show dialog to choose role
       _showRoleSelectionDialog(
         uid: result['userId'],
         email: result['email'],
@@ -344,17 +507,20 @@ class _SignInScreenState extends State<SignInScreen>
             ),
           ),
 
-          // Logo
+          // Logo with tap gesture for admin access
           Positioned(
             left: horizontalPadding,
             right: horizontalPadding,
             top: logoTopPosition,
             height: logoSize + 40,
             child: Center(
-              child: Image.asset(
-                'assets/logo.png',
-                height: logoSize,
-                fit: BoxFit.contain,
+              child: GestureDetector(
+                onTap: _onLogoTap,
+                child: Image.asset(
+                  'assets/logo.png',
+                  height: logoSize,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
           ),
@@ -574,7 +740,7 @@ class _SignInScreenState extends State<SignInScreen>
                                       child: CircularProgressIndicator(strokeWidth: 2.5),
                                     )
                                   : Image.asset(
-                                      'assets/google_logo.png', // Make sure to add Google logo to assets
+                                      'assets/google_logo.png',
                                       height: 24,
                                       width: 24,
                                     ),
@@ -694,7 +860,7 @@ class _SignInScreenState extends State<SignInScreen>
 }
 
 // ===================================================================
-// BACKGROUND PAINTERS - UNCHANGED
+// BACKGROUND PAINTERS
 // ===================================================================
 class ModernBackgroundPainter extends CustomPainter {
   final double animation;

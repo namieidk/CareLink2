@@ -14,6 +14,12 @@ class AuthService {
   final auth.FirebaseAuth _firebaseAuth = auth.FirebaseAuth.instance;
   late final GoogleSignIn _googleSignIn;
 
+  // Admin verification key (stored securely in environment or secure storage)
+  static const String ADMIN_VERIFICATION_KEY = String.fromEnvironment(
+    'ADMIN_KEY',
+    defaultValue: 'CARELINK_ADMIN_2025', // Change this to your secure key
+  );
+
   AuthService() {
     if (kIsWeb) {
       _googleSignIn = GoogleSignIn(
@@ -39,6 +45,18 @@ class AuthService {
   Stream<auth.User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   // ──────────────────────────────────────────────
+  // ADMIN VERIFICATION
+  // ──────────────────────────────────────────────
+  Future<bool> verifyAdminKey(String key) async {
+    return key == ADMIN_VERIFICATION_KEY;
+  }
+
+  Future<bool> adminExists() async {
+    final query = await Admin.collection.limit(1).get();
+    return query.docs.isNotEmpty;
+  }
+
+  // ──────────────────────────────────────────────
   // GOOGLE SIGN IN
   // ──────────────────────────────────────────────
   Future<Map<String, dynamic>> signInWithGoogle() async {
@@ -53,11 +71,15 @@ class AuthService {
       final userCredential = await _firebaseAuth.signInWithCredential(credential);
       final uid = userCredential.user!.uid;
       final email = userCredential.user!.email!;
+      
+      // Check Patient
       final patientDoc = await Patient.collection.doc(uid).get();
       if (patientDoc.exists) {
         final data = patientDoc.data() as Map<String, dynamic>;
         return {'success': true, 'userId': uid, 'userData': data, 'role': 'Patient'};
       }
+      
+      // Check Caregiver
       final caregiverDoc = await Caregiver.collection.doc(uid).get();
       if (caregiverDoc.exists) {
         final data = caregiverDoc.data() as Map<String, dynamic>;
@@ -69,6 +91,7 @@ class AuthService {
         await Caregiver.collection.doc(uid).update({'lastLogin': FieldValue.serverTimestamp()});
         return {'success': true, 'userId': uid, 'userData': data, 'role': 'Caregiver'};
       }
+      
       return {
         'success': false,
         'error': 'account_not_found',
@@ -139,11 +162,15 @@ class AuthService {
     try {
       final credential = await _firebaseAuth.signInWithEmailAndPassword(email: email.trim(), password: password);
       final uid = credential.user!.uid;
+      
+      // Check Patient
       final patientDoc = await Patient.collection.doc(uid).get();
       if (patientDoc.exists) {
         final data = patientDoc.data() as Map<String, dynamic>;
         return {'success': true, 'userId': uid, 'userData': data, 'role': 'Patient'};
       }
+      
+      // Check Caregiver
       final caregiverDoc = await Caregiver.collection.doc(uid).get();
       if (caregiverDoc.exists) {
         final data = caregiverDoc.data() as Map<String, dynamic>;
@@ -154,6 +181,19 @@ class AuthService {
         await Caregiver.collection.doc(uid).update({'lastLogin': FieldValue.serverTimestamp()});
         return {'success': true, 'userId': uid, 'userData': data, 'role': 'Caregiver'};
       }
+      
+      // Check Admin
+      final adminDoc = await Admin.collection.doc(uid).get();
+      if (adminDoc.exists) {
+        final data = adminDoc.data() as Map<String, dynamic>;
+        if (data['isActive'] == false) {
+          await _firebaseAuth.signOut();
+          return {'success': false, 'error': 'Account is deactivated'};
+        }
+        await Admin.collection.doc(uid).update({'lastLogin': FieldValue.serverTimestamp()});
+        return {'success': true, 'userId': uid, 'userData': data, 'role': 'Admin'};
+      }
+      
       await _firebaseAuth.signOut();
       return {'success': false, 'error': 'User data not found in database'};
     } on auth.FirebaseAuthException catch (e) {
@@ -288,18 +328,42 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // ADMIN SIGN UP / SIGN IN
+  // ADMIN SIGN UP / SIGN IN (ONE-TIME ONLY)
   // ──────────────────────────────────────────────
-  Future<Map<String, dynamic>> signUpAdmin({required String username, required String email, required String password, String? fullName}) async {
+  Future<Map<String, dynamic>> signUpAdmin({
+    required String username,
+    required String email,
+    required String password,
+    required String verificationKey,
+    String? fullName,
+  }) async {
     try {
+      // Check if admin already exists
+      if (await adminExists()) {
+        return {'success': false, 'error': 'Admin account already exists'};
+      }
+
+      // Verify admin key
+      if (!await verifyAdminKey(verificationKey)) {
+        return {'success': false, 'error': 'Invalid admin verification key'};
+      }
+
       final usernameLower = username.trim().toLowerCase();
-      final existing = await Admin.collection.where('username', isEqualTo: usernameLower).limit(1).get();
-      if (existing.docs.isNotEmpty) return {'success': false, 'error': 'Username already taken'};
       final credential = await _firebaseAuth.createUserWithEmailAndPassword(email: email.trim(), password: password);
-      final admin = Admin(id: credential.user!.uid, username: username.trim(), email: email.trim(), password: password, fullName: fullName);
-      final data = admin.toMap()..['email_lower'] = email.trim().toLowerCase()..['username'] = usernameLower;
+      final admin = Admin(
+        id: credential.user!.uid,
+        username: username.trim(),
+        email: email.trim(),
+        password: password,
+        fullName: fullName,
+      );
+      final data = admin.toMap()
+        ..['email_lower'] = email.trim().toLowerCase()
+        ..['username'] = usernameLower;
       await Admin.collection.doc(admin.id).set(data);
-      if (fullName != null && fullName.isNotEmpty) await credential.user!.updateDisplayName(fullName);
+      if (fullName != null && fullName.isNotEmpty) {
+        await credential.user!.updateDisplayName(fullName);
+      }
       return {'success': true, 'userId': admin.id};
     } on auth.FirebaseAuthException catch (e) {
       return {'success': false, 'error': _getAuthErrorMessage(e)};
@@ -329,7 +393,7 @@ class AuthService {
   }
 
   // ──────────────────────────────────────────────
-  // GOOGLE MEET LINK CREATOR — IMPROVED WITH BETTER ERROR HANDLING
+  // GOOGLE MEET LINK CREATOR
   // ──────────────────────────────────────────────
   Future<String?> createGoogleMeetLink({
     required DateTime startTime,
@@ -343,7 +407,6 @@ class AuthService {
         return null;
       }
 
-      // Sign in with Google (scope is already declared in constructor)
       GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
       
       if (googleUser == null) {
@@ -357,12 +420,10 @@ class AuthService {
 
       debugPrint('✅ Google user signed in: ${googleUser.email}');
 
-      // Get auth headers
       final authHeaders = await googleUser.authHeaders;
       final client = _AuthenticatedClient(http.Client(), authHeaders);
       final calendarApi = calendar.CalendarApi(client);
 
-      // Create event
       final startTimeUtc = startTime.toUtc();
       final endTimeUtc = startTimeUtc.add(Duration(minutes: durationMinutes));
       
