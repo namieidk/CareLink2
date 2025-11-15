@@ -14,8 +14,7 @@ class AdminDoctorsScreen extends StatefulWidget {
 }
 
 class _AdminDoctorsScreenState extends State<AdminDoctorsScreen> {
-  static const Color primary = Color(0xFFFF8BA0); // Softer pink shade
-  static const Color primaryDark = Color(0xFFE57A8F);
+  static const Color primary = Color(0xFFFF8BA0);
   static const Color muted = Colors.grey;
   static const Color cardShadow = Color(0x08000000);
 
