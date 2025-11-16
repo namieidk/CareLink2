@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'Medication.dart';
 import 'Caregiver.dart';
-import 'Appointment.dart';
+import 'doctor.dart';
 import 'Profile.dart';
 
 class PatientHomePage extends StatelessWidget {
@@ -61,7 +61,7 @@ class PatientHomePage extends StatelessWidget {
                   case 3:
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (_) => const AppointmentPage()),
+                      MaterialPageRoute(builder: (_) => const DoctorPage()),
                     );
                     break;
                   case 4:

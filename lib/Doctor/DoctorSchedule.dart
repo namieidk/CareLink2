@@ -18,15 +18,12 @@ class DoctorScheduleScreen extends StatefulWidget {
 class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   // Blue theme for doctor
   static const Color primary = Color(0xFF4A90E2);
-  static const Color primaryLight = Color(0xFFE3F2FD);
-  static const Color secondary = Color(0xFF64B5F6);
   static const Color accent = Color(0xFF1976D2);
   static const Color success = Color(0xFF4CAF50);
   static const Color warning = Color(0xFFFF9800);
   static const Color info = Color(0xFF2196F3);
   static const Color muted = Colors.grey;
   static const Color background = Color(0xFFF8F9FA);
-  static const Color cardShadow = Color(0x12000000);
 
   // Calendar and schedule variables
   late CalendarFormat _calendarFormat;

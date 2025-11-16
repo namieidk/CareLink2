@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'Home.dart';
-import 'Appointment.dart';
+import 'doctor.dart';
 import 'Caregiver.dart';
 import 'Profile.dart';
 import 'Medication/AddMed.dart'; // AddMed.dart
@@ -80,7 +80,7 @@ class _PatientMedicationScreenState extends State<PatientMedicationScreen>
                     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientCaregiverScreen()));
                     break;
                   case 3:
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AppointmentPage()));
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DoctorPage()));
                     break;
                   case 4:
                     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientProfileScreen()));

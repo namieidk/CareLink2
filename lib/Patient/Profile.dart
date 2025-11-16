@@ -5,7 +5,7 @@
   import 'Home.dart';
   import 'Medication.dart';
   import 'Caregiver.dart';
-  import 'Appointment.dart';
+  import 'doctor.dart';
   import 'Profile/EditProfile.dart';
   import '../../models/patient_profile.dart';
   import '../Signin/up/Signin.dart';
@@ -448,7 +448,7 @@
               case 0: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientHomePage())); break;
               case 1: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientMedicationScreen())); break;
               case 2: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PatientCaregiverScreen())); break;
-              case 3: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AppointmentPage())); break;
+              case 3: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DoctorPage())); break;
             }
           },
           child: Column(

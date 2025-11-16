@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import 'Home.dart';
 import 'Medication.dart';
-import 'Appointment.dart';
+import 'doctor.dart';
 import 'Profile.dart';
 import '../shared/message.dart';
 import '../../models/caregiver_profile.dart';
@@ -1445,7 +1445,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             0: const PatientHomePage(),
             1: const PatientMedicationScreen(),
             2: const PatientCaregiverScreen(),
-            3: const AppointmentPage(),
+            3: const DoctorPage(),
             4: const PatientProfileScreen(),
           }[index]!;
           Navigator.pushReplacement(ctx, MaterialPageRoute(builder: (_) => target));
