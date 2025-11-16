@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/medication.dart';
+import '../../models/Medication.dart';
 import '../../models/doctor_profile.dart';
 
 class AddMedicationScreen extends StatefulWidget {
@@ -19,7 +19,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   final _instructionsController = TextEditingController();
   final _sideEffectsController = TextEditingController();
 
-  String _selectedTime = '08:00 AM';
+  List<String> _selectedTimes = ['08:00 AM'];
   String _selectedPeriod = 'Morning';
   String _selectedFrequency = 'Once daily';
   String? _selectedDoctorId;
@@ -91,7 +91,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       setState(() {
         _doctors = doctors;
         _loadingDoctors = false;
-        // Auto-select first doctor if available
         if (_doctors.isNotEmpty && _selectedDoctorId == null) {
           _selectedDoctorId = _doctors.first.id;
         }
@@ -104,7 +103,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     }
   }
 
-  Future<void> _selectTime(BuildContext context) async {
+  Future<void> _selectTime(BuildContext context, int index) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -122,7 +121,21 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     );
     if (picked != null) {
       setState(() {
-        _selectedTime = picked.format(context);
+        _selectedTimes[index] = picked.format(context);
+      });
+    }
+  }
+
+  void _addTimeSlot() {
+    setState(() {
+      _selectedTimes.add('08:00 AM');
+    });
+  }
+
+  void _removeTimeSlot(int index) {
+    if (_selectedTimes.length > 1) {
+      setState(() {
+        _selectedTimes.removeAt(index);
       });
     }
   }
@@ -147,19 +160,17 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Not logged in");
 
-      // Get selected doctor details
       final selectedDoctor = _doctors.firstWhere(
         (doctor) => doctor.id == _selectedDoctorId,
         orElse: () => _doctors.first,
       );
 
-      // Create Medication object
       final medication = Medication(
-        id: '', // Will be set by Firestore
+        id: '',
         patientId: user.uid,
         name: _nameController.text.trim(),
         dose: _doseController.text.trim(),
-        time: _selectedTime,
+        times: _selectedTimes,
         period: _selectedPeriod,
         frequency: _selectedFrequency,
         purpose: _purposeController.text.trim(),
@@ -173,7 +184,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         createdAt: DateTime.now(),
       );
 
-      // Save to Firestore
       await FirebaseFirestore.instance
           .collection('medications')
           .add(medication.toMap());
@@ -285,7 +295,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // Header
             Container(
               margin: const EdgeInsets.only(bottom: 24),
               padding: const EdgeInsets.all(16),
@@ -334,7 +343,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               ),
             ),
 
-            // Medication Details Section
             _buildSectionHeader('Medication Details'),
             const SizedBox(height: 16),
             _buildTextField(_nameController, 'Medication Name', 'e.g. Metformin', Icons.medication_outlined),
@@ -342,25 +350,14 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             _buildTextField(_doseController, 'Dose', 'e.g. 500mg', Icons.format_size),
             const SizedBox(height: 16),
             
-            // Time Section
             _buildSectionHeader('Schedule'),
             const SizedBox(height: 16),
-            Column(
-              children: [
-                _buildTimePicker(),
-                const SizedBox(height: 12),
-                _buildDropdown(
-                  'Time of Day',
-                  _selectedPeriod,
-                  ['Morning', 'Afternoon', 'Evening', 'Night'],
-                  (val) => setState(() => _selectedPeriod = val!),
-                ),
-                const SizedBox(height: 12),
-                _buildFrequencyDropdown(),
-              ],
-            ),
+            _buildTimeSlots(),
+            const SizedBox(height: 12),
+            _buildPeriodDropdown(),
+            const SizedBox(height: 12),
+            _buildFrequencyDropdown(),
 
-            // Additional Information Section
             const SizedBox(height: 24),
             _buildSectionHeader('Additional Information'),
             const SizedBox(height: 16),
@@ -371,10 +368,8 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             _buildTextField(_sideEffectsController, 'Side Effects', 'e.g. Nausea', Icons.warning_amber_outlined),
             const SizedBox(height: 16),
             
-            // Doctor Selection Dropdown
             _buildDoctorDropdown(),
 
-            // Save Button
             const SizedBox(height: 32),
             Container(
               height: 56,
@@ -446,42 +441,68 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     );
   }
 
-  Widget _buildTimePicker() {
-    return InkWell(
-      onTap: () => _selectTime(context),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.access_time, color: primaryColor.withOpacity(0.7)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                _selectedTime,
-                style: TextStyle(fontSize: 16, color: textColor, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-              ),
+  Widget _buildTimeSlots() {
+    return Column(
+      children: [
+        ...List.generate(_selectedTimes.length, (index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _selectTime(context, index),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 56,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, color: primaryColor.withOpacity(0.7)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _selectedTimes[index],
+                              style: TextStyle(fontSize: 16, color: textColor, fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(Icons.keyboard_arrow_down, color: textMuted),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (_selectedTimes.length > 1)
+                  IconButton(
+                    onPressed: () => _removeTimeSlot(index),
+                    icon: Icon(Icons.remove_circle_outline, color: Colors.red),
+                  ),
+              ],
             ),
-            Icon(Icons.keyboard_arrow_down, color: textMuted),
-          ],
+          );
+        }),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _addTimeSlot,
+          icon: Icon(Icons.add_circle_outline, color: primaryColor),
+          label: Text('Add Another Time', style: TextStyle(color: primaryColor)),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
+  Widget _buildPeriodDropdown() {
     return DropdownButtonFormField<String>(
-      value: value,
+      value: _selectedPeriod,
       style: TextStyle(color: textColor, fontSize: 16),
       decoration: InputDecoration(
-        labelText: label,
+        labelText: 'Time of Day',
         filled: true,
         fillColor: cardColor,
         border: OutlineInputBorder(
@@ -499,11 +520,15 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         labelStyle: TextStyle(color: textMuted),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
-      items: items.map((item) => DropdownMenuItem(
+      items: ['Morning', 'Afternoon', 'Evening', 'Night'].map((item) => DropdownMenuItem(
         value: item,
         child: Text(item, style: TextStyle(color: textColor)),
       )).toList(),
-      onChanged: onChanged,
+      onChanged: (String? value) {
+        setState(() {
+          _selectedPeriod = value!;
+        });
+      },
       icon: Icon(Icons.keyboard_arrow_down, color: textMuted),
       dropdownColor: cardColor,
     );
@@ -554,8 +579,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       dropdownColor: cardColor,
       isExpanded: true,
       validator: (value) => value == null ? 'Please select frequency' : null,
-      // Limit the dropdown height
-      menuMaxHeight: 300, // This prevents it from covering the whole screen
     );
   }
 
@@ -658,7 +681,6 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                   icon: Icon(Icons.keyboard_arrow_down, color: textMuted),
                   dropdownColor: cardColor,
                   isExpanded: true,
-                  menuMaxHeight: 300, // Also limit doctor dropdown height
                   validator: (value) => value == null ? 'Please select a doctor' : null,
                 ),
               ),

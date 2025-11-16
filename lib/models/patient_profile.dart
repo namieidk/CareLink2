@@ -62,6 +62,26 @@ class PatientProfile {
     this.updatedAt,
   });
 
+  // Helper getters for backward compatibility
+  String get firstName {
+    final parts = fullName.trim().split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+
+  String get lastName {
+    final parts = fullName.trim().split(' ');
+    return parts.length > 1 ? parts.sublist(1).join(' ') : '';
+  }
+
+  String get primaryCondition {
+    return conditions.isNotEmpty ? conditions.first : 'No condition';
+  }
+
+  factory PatientProfile.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return PatientProfile.fromMap(data, doc.id);
+  }
+
   factory PatientProfile.fromMap(Map<String, dynamic> map, String docId) {
     return PatientProfile(
       id: docId,
@@ -79,7 +99,9 @@ class PatientProfile {
               .toList() ??
           [],
       profilePhotoUrl: map['profilePhotoUrl'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      createdAt: map['createdAt'] != null
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
       updatedAt: map['updatedAt'] != null
           ? (map['updatedAt'] as Timestamp).toDate()
           : null,
@@ -102,5 +124,39 @@ class PatientProfile {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt ?? DateTime.now()),
     };
+  }
+
+  PatientProfile copyWith({
+    String? id,
+    String? patientId,
+    String? fullName,
+    int? age,
+    String? email,
+    String? phone,
+    String? address,
+    String? bloodType,
+    List<String>? allergies,
+    List<String>? conditions,
+    List<EmergencyContact>? emergencyContacts,
+    String? profilePhotoUrl,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return PatientProfile(
+      id: id ?? this.id,
+      patientId: patientId ?? this.patientId,
+      fullName: fullName ?? this.fullName,
+      age: age ?? this.age,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+      bloodType: bloodType ?? this.bloodType,
+      allergies: allergies ?? this.allergies,
+      conditions: conditions ?? this.conditions,
+      emergencyContacts: emergencyContacts ?? this.emergencyContacts,
+      profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
   }
 }

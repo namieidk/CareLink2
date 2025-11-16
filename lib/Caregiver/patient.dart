@@ -9,6 +9,7 @@ import 'Home.dart';
 import 'caremed.dart';
 import 'calendar.dart';
 import 'Profile.dart';
+import 'patients/CarePatient.dart';
 import '../shared/message.dart';
 import '../models/patient_profile.dart';
 import '../../auth_service.dart';
@@ -172,7 +173,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
     });
   }
 
-  // ONLY real incoming requests from patients appear in the purple bell
   void _listenToBookings() {
     _firestore
         .collection('bookings')
@@ -184,8 +184,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
-
-        // Skip bookings that the caregiver himself created
         if (data['requestedBy'] == 'caregiver') continue;
 
         bookings.add({
@@ -222,7 +220,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
     });
   }
 
-  // All accepted bookings (from both sides) appear here
   void _listenToAcceptedBookings() {
     _firestore
         .collection('bookings')
@@ -285,24 +282,17 @@ class _PatientsScreenState extends State<PatientsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
       builder: (_) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
-            _buildBottomSheetHeader(
+            _buildSheetHeader(
               'Messages',
-              _totalUnread > 0
-                  ? '$_totalUnread unread messages'
-                  : 'No unread messages',
+              _totalUnread > 0 ? '$_totalUnread unread' : 'No unread',
               Icons.message,
               pink,
             ),
@@ -310,15 +300,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
               child: _isLoadingMessages
                   ? const Center(child: CircularProgressIndicator())
                   : _messageList.isEmpty
-                      ? const Center(
-                          child: Text('No conversations yet',
-                              style: TextStyle(color: Colors.grey)))
+                      ? const Center(child: Text('No conversations'))
                       : ListView.builder(
                           padding: const EdgeInsets.all(20),
                           itemCount: _messageList.length,
                           itemBuilder: (_, i) {
                             final chat = _messageList[i];
-                            return _buildMessageCard(
+                            return _buildMsgCard(
                               chat['patientName'],
                               chat['lastMessage'],
                               _formatTime(chat['lastTime']),
@@ -355,66 +343,38 @@ class _PatientsScreenState extends State<PatientsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
       builder: (_) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
-            _buildBottomSheetHeader(
-              'Booking Requests from Patients',
-              _totalPendingBookings > 0
-                  ? '$_totalPendingBookings pending'
-                  : 'No pending requests',
+            _buildSheetHeader(
+              'Booking Requests',
+              _totalPendingBookings > 0 ? '$_totalPendingBookings pending' : 'No pending',
               Icons.notifications_active,
               purple,
             ),
             Expanded(
               child: _isLoadingBookings
-                  ? const Center(
-                      child: CircularProgressIndicator(color: purple),
-                    )
+                  ? const Center(child: CircularProgressIndicator(color: purple))
                   : _bookingList.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.event_available,
-                                  size: 64, color: Colors.grey[300]),
+                              Icon(Icons.event_available, size: 64, color: Colors.grey[300]),
                               const SizedBox(height: 16),
-                              const Text(
-                                'No booking requests',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Booking requests from patients will appear here',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13,
-                                ),
-                              ),
+                              const Text('No booking requests', style: TextStyle(color: Colors.grey, fontSize: 16)),
                             ],
                           ),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.all(20),
                           itemCount: _bookingList.length,
-                          itemBuilder: (_, i) {
-                            final booking = _bookingList[i];
-                            return _buildBookingCard(booking);
-                          },
+                          itemBuilder: (_, i) => _buildBookingCard(_bookingList[i]),
                         ),
             ),
           ],
@@ -428,66 +388,38 @@ class _PatientsScreenState extends State<PatientsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
       builder: (_) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
-            _buildBottomSheetHeader(
+            _buildSheetHeader(
               'Accepted Bookings',
-              _totalAcceptedBookings > 0
-                  ? '$_totalAcceptedBookings upcoming'
-                  : 'No accepted bookings',
+              _totalAcceptedBookings > 0 ? '$_totalAcceptedBookings upcoming' : 'No accepted',
               Icons.check_circle,
               green,
             ),
             Expanded(
               child: _isLoadingAcceptedBookings
-                  ? const Center(
-                      child: CircularProgressIndicator(color: green),
-                    )
+                  ? const Center(child: CircularProgressIndicator(color: green))
                   : _acceptedBookingList.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.event_available,
-                                  size: 64, color: Colors.grey[300]),
+                              Icon(Icons.event_available, size: 64, color: Colors.grey[300]),
                               const SizedBox(height: 16),
-                              const Text(
-                                'No accepted bookings',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Accepted bookings will appear here',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13,
-                                ),
-                              ),
+                              const Text('No accepted bookings', style: TextStyle(color: Colors.grey, fontSize: 16)),
                             ],
                           ),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.all(20),
                           itemCount: _acceptedBookingList.length,
-                          itemBuilder: (_, i) {
-                            final booking = _acceptedBookingList[i];
-                            return _buildAcceptedBookingCard(booking);
-                          },
+                          itemBuilder: (_, i) => _buildAcceptedCard(_acceptedBookingList[i]),
                         ),
             ),
           ],
@@ -507,11 +439,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: purple.withOpacity(0.3)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -526,9 +454,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  booking['interviewType'] == 'Video Call'
-                      ? Icons.videocam
-                      : Icons.person_pin_circle,
+                  booking['interviewType'] == 'Video Call' ? Icons.videocam : Icons.person_pin_circle,
                   color: purple,
                   size: 24,
                 ),
@@ -538,21 +464,8 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      booking['patientName'],
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    Text(
-                      booking['interviewType'],
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                    ),
+                    Text(booking['patientName'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(booking['interviewType'], style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                   ],
                 ),
               ),
@@ -560,58 +473,30 @@ class _PatientsScreenState extends State<PatientsScreen> {
           ),
           const SizedBox(height: 16),
           if (dateTime != null) ...[
-            _infoRow(
-              Icons.calendar_today,
-              DateFormat('MMM d, yyyy').format(dateTime),
-              color: purple,
-            ),
+            _buildInfoRow(Icons.calendar_today, DateFormat('MMM d, yyyy').format(dateTime), purple),
             const SizedBox(height: 8),
-            _infoRow(
-              Icons.access_time,
-              '${DateFormat('h:mm a').format(dateTime)} (${booking['durationHours']}h)',
-              color: purple,
-            ),
+            _buildInfoRow(Icons.access_time, '${DateFormat('h:mm a').format(dateTime)} (${booking['durationHours']}h)', purple),
             const SizedBox(height: 8),
           ],
           if (booking['meetLink'] != null) ...[
-            _infoRow(
-              Icons.link,
-              'Google Meet link included',
-              color: purple,
-            ),
+            _buildInfoRow(Icons.link, 'Google Meet link included', purple),
             const SizedBox(height: 8),
           ],
-          if (booking['address'] != null &&
-              booking['address'].toString().isNotEmpty) ...[
-            _infoRow(
-              Icons.location_on,
-              booking['address'],
-              color: purple,
-            ),
+          if (booking['address'] != null && booking['address'].toString().isNotEmpty) ...[
+            _buildInfoRow(Icons.location_on, booking['address'], purple),
             const SizedBox(height: 8),
           ],
           if (booking['notes'].toString().isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.note, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      booking['notes'],
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                  ),
+                  Expanded(child: Text(booking['notes'], style: TextStyle(fontSize: 13, color: Colors.grey[700]))),
                 ],
               ),
             ),
@@ -621,34 +506,28 @@ class _PatientsScreenState extends State<PatientsScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () =>
-                      _handleBookingResponse(booking['id'], 'rejected', booking),
+                  onPressed: () => _handleBookingResponse(booking['id'], 'rejected', booking),
                   icon: const Icon(Icons.close, size: 18),
                   label: const Text('Reject'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
                     side: const BorderSide(color: Colors.red, width: 1.5),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () =>
-                      _handleBookingResponse(booking['id'], 'accepted', booking),
+                  onPressed: () => _handleBookingResponse(booking['id'], 'accepted', booking),
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('Accept'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
@@ -659,7 +538,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _buildAcceptedBookingCard(Map<String, dynamic> booking) {
+  Widget _buildAcceptedCard(Map<String, dynamic> booking) {
     final startTime = booking['startTime'] as Timestamp?;
     final dateTime = startTime?.toDate();
     final meetLink = booking['meetLink'] as String?;
@@ -671,11 +550,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: green.withOpacity(0.3)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -685,14 +560,9 @@ class _PatientsScreenState extends State<PatientsScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                 child: Icon(
-                  booking['interviewType'] == 'Video Call'
-                      ? Icons.videocam
-                      : Icons.person_pin_circle,
+                  booking['interviewType'] == 'Video Call' ? Icons.videocam : Icons.person_pin_circle,
                   color: green,
                   size: 24,
                 ),
@@ -702,87 +572,40 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      booking['patientName'],
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    Text(
-                      booking['interviewType'],
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                    ),
+                    Text(booking['patientName'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(booking['interviewType'], style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Accepted',
-                  style: TextStyle(
-                    color: green,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                decoration: BoxDecoration(color: green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Text('Accepted', style: TextStyle(color: green, fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
           const SizedBox(height: 16),
           if (dateTime != null) ...[
-            _infoRow(
-              Icons.calendar_today,
-              DateFormat('MMM d, yyyy').format(dateTime),
-              color: green,
-            ),
+            _buildInfoRow(Icons.calendar_today, DateFormat('MMM d, yyyy').format(dateTime), green),
             const SizedBox(height: 8),
-            _infoRow(
-              Icons.access_time,
-              '${DateFormat('h:mm a').format(dateTime)} (${booking['durationHours']}h)',
-              color: green,
-            ),
+            _buildInfoRow(Icons.access_time, '${DateFormat('h:mm a').format(dateTime)} (${booking['durationHours']}h)', green),
             const SizedBox(height: 8),
           ],
-          if (booking['address'] != null &&
-              booking['address'].toString().isNotEmpty) ...[
-            _infoRow(
-              Icons.location_on,
-              booking['address'],
-              color: green,
-            ),
+          if (booking['address'] != null && booking['address'].toString().isNotEmpty) ...[
+            _buildInfoRow(Icons.location_on, booking['address'], green),
             const SizedBox(height: 8),
           ],
           if (booking['notes'].toString().isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.note, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      booking['notes'],
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                  ),
+                  Expanded(child: Text(booking['notes'], style: TextStyle(fontSize: 13, color: Colors.grey[700]))),
                 ],
               ),
             ),
@@ -799,9 +622,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                   backgroundColor: green,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -819,10 +640,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not open the meeting link'),
-              backgroundColor: Colors.red,
-            ),
+            const SnackBar(content: Text('Could not open the meeting link'), backgroundColor: Colors.red),
           );
         }
       }
@@ -830,10 +648,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
       debugPrint('Error launching URL: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -844,9 +659,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(
-          child: CircularProgressIndicator(color: purple),
-        ),
+        builder: (_) => const Center(child: CircularProgressIndicator(color: purple)),
       );
 
       String? generatedMeetLink;
@@ -909,23 +722,18 @@ class _PatientsScreenState extends State<PatientsScreen> {
             height: MediaQuery.of(context).size.height * 0.85,
             decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
-              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
-                _buildBottomSheetHeader('Book $name',
-                    'Interview & Schedule', Icons.calendar_today, purple),
+                _buildSheetHeader('Book $name', 'Interview & Schedule', Icons.calendar_today, purple),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Interview Type',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Interview Type', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -950,16 +758,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
                         ),
                         const SizedBox(height: 20),
                         if (interviewType == 'In-Person') ...[
-                          const Text('Address',
-                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          const Text('Address', style: TextStyle(fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
                           TextField(
                             controller: addressController,
                             decoration: InputDecoration(
                               hintText: 'Enter meeting address',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(color: purple, width: 2),
@@ -968,8 +773,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                           ),
                           const SizedBox(height: 20),
                         ],
-                        const Text('Date',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Date', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         InkWell(
                           onTap: () async {
@@ -993,24 +797,17 @@ class _PatientsScreenState extends State<PatientsScreen> {
                               children: [
                                 const Icon(Icons.calendar_today, color: purple),
                                 const SizedBox(width: 12),
-                                Text(
-                                  DateFormat('EEE, MMM d, yyyy').format(selectedDate),
-                                  style: const TextStyle(fontSize: 15),
-                                ),
+                                Text(DateFormat('EEE, MMM d, yyyy').format(selectedDate), style: const TextStyle(fontSize: 15)),
                               ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Time',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Time', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         InkWell(
                           onTap: () async {
-                            final time = await showTimePicker(
-                              context: context,
-                              initialTime: selectedTime,
-                            );
+                            final time = await showTimePicker(context: context, initialTime: selectedTime);
                             if (time != null) {
                               setModalState(() => selectedTime = time);
                             }
@@ -1025,17 +822,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
                               children: [
                                 const Icon(Icons.access_time, color: purple),
                                 const SizedBox(width: 12),
-                                Text(
-                                  selectedTime.format(context),
-                                  style: const TextStyle(fontSize: 15),
-                                ),
+                                Text(selectedTime.format(context), style: const TextStyle(fontSize: 15)),
                               ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 20),
-                        const Text('Duration',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Duration', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         Slider(
                           value: durationHours.toDouble(),
@@ -1049,17 +842,14 @@ class _PatientsScreenState extends State<PatientsScreen> {
                           },
                         ),
                         const SizedBox(height: 20),
-                        const Text('Notes (Optional)',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Notes (Optional)', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         TextField(
                           controller: notesController,
                           maxLines: 3,
                           decoration: InputDecoration(
                             hintText: 'Any special requirements?',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(color: purple, width: 2),
@@ -1071,8 +861,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: () async {
-                              if (interviewType == 'In-Person' &&
-                                  addressController.text.trim().isEmpty) {
+                              if (interviewType == 'In-Person' && addressController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Please enter an address for In-Person meeting'),
@@ -1093,8 +882,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                               showDialog(
                                 context: context,
                                 barrierDismissible: false,
-                                builder: (_) => const Center(
-                                    child: CircularProgressIndicator(color: purple)),
+                                builder: (_) => const Center(child: CircularProgressIndicator(color: purple)),
                               );
 
                               String? meetLink;
@@ -1135,13 +923,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 'meetLink': meetLink,
                                 'address': address,
                                 'status': 'pending',
-                                'requestedBy': 'caregiver',   // THIS IS THE ONLY NEW LINE
+                                'requestedBy': 'caregiver',
                                 'createdAt': FieldValue.serverTimestamp(),
                               };
 
                               try {
                                 await _firestore.collection('bookings').add(bookingData);
-                                Navigator.pop(context); // close modal
+                                Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(interviewType == 'Video Call'
@@ -1152,24 +940,16 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 );
                               } catch (e) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error creating booking: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
+                                  SnackBar(content: Text('Error creating booking: $e'), backgroundColor: Colors.red),
                                 );
                               }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: purple,
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: const Text(
-                              'Send Booking Request',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
+                            child: const Text('Send Booking Request', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -1184,8 +964,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _optionCard(
-      String title, IconData icon, bool selected, VoidCallback onTap) {
+  Widget _optionCard(String title, IconData icon, bool selected, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1201,8 +980,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
         ),
         child: Column(
           children: [
-            Icon(icon,
-                color: selected ? purple : Colors.grey[600], size: 28),
+            Icon(icon, color: selected ? purple : Colors.grey[600], size: 28),
             const SizedBox(height: 8),
             Text(
               title,
@@ -1226,67 +1004,44 @@ class _PatientsScreenState extends State<PatientsScreen> {
           children: [
             Container(
               decoration: const BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: Offset(0, 2))
-                  ]),
+                color: Colors.white,
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 2))],
+              ),
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               child: Column(
                 children: [
                   Row(
                     children: [
                       IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back,
-                              color: Colors.black54)),
-                      const Text('Browse Patients',
-                          style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87)),
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back, color: Colors.black54),
+                      ),
+                      const Text('Browse Patients', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
                       const Spacer(),
-                      IconButton(
-                          onPressed: () {},
-                          icon:
-                              const Icon(Icons.search, color: Colors.black54)),
-                      IconButton(
-                          onPressed: () {},
-                          icon: const Icon(Icons.filter_list,
-                              color: Colors.black54)),
+                      IconButton(onPressed: () {}, icon: const Icon(Icons.search, color: Colors.black54)),
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const CarePatient()));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: purple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.people_outline, color: purple, size: 24),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(
-                        child: _iconButton(
-                          icon: Icons.notifications_active,
-                          badge: _totalPendingBookings,
-                          color: purple,
-                          onTap: _showBookingRequests,
-                        ),
-                      ),
+                      Expanded(child: _iconButton(icon: Icons.notifications_active, badge: _totalPendingBookings, color: purple, onTap: _showBookingRequests)),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _iconButton(
-                          icon: Icons.check_circle,
-                          badge: _totalAcceptedBookings,
-                          color: green,
-                          onTap: _showAcceptedBookings,
-                        ),
-                      ),
+                      Expanded(child: _iconButton(icon: Icons.check_circle, badge: _totalAcceptedBookings, color: green, onTap: _showAcceptedBookings)),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _iconButton(
-                          icon: Icons.message,
-                          badge: _totalUnread,
-                          color: pink,
-                          onTap: _showMessagesInbox,
-                        ),
-                      ),
+                      Expanded(child: _iconButton(icon: Icons.message, badge: _totalUnread, color: pink, onTap: _showMessagesInbox)),
                     ],
                   ),
                 ],
@@ -1294,18 +1049,15 @@ class _PatientsScreenState extends State<PatientsScreen> {
             ),
             Expanded(
               child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: purple))
+                  ? const Center(child: CircularProgressIndicator(color: purple))
                   : patients.isEmpty
-                      ? const Center(
-                          child: Text('No patients found.',
-                              style: TextStyle(color: Colors.grey)))
+                      ? const Center(child: Text('No patients found.', style: TextStyle(color: Colors.grey)))
                       : ListView.builder(
                           padding: const EdgeInsets.all(20),
                           itemCount: patients.length,
                           itemBuilder: (_, i) => Column(
                             children: [
-                              _buildExpandablePatientCard(patients[i]),
+                              _buildPatientCard(patients[i]),
                               const SizedBox(height: 16),
                             ],
                           ),
@@ -1314,15 +1066,11 @@ class _PatientsScreenState extends State<PatientsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomMessageNav(context, 1),
+      bottomNavigationBar: _buildBottomNav(context, 1),
     );
   }
 
-  Widget _iconButton(
-      {required IconData icon,
-      required int badge,
-      required Color color,
-      required VoidCallback onTap}) {
+  Widget _iconButton({required IconData icon, required int badge, required Color color, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -1342,18 +1090,10 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 top: 8,
                 child: Container(
                   padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                      color: Color(0xFFFF5252), shape: BoxShape.circle),
-                  constraints: const BoxConstraints(
-                    minWidth: 20,
-                    minHeight: 20,
-                  ),
+                  decoration: const BoxDecoration(color: Color(0xFFFF5252), shape: BoxShape.circle),
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                   child: Center(
-                    child: Text('$badge',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                    child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
@@ -1363,10 +1103,9 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _buildExpandablePatientCard(PatientProfile p) {
+  Widget _buildPatientCard(PatientProfile p) {
     final bool isExpanded = _expandedMap[p.id] ?? false;
-    final chat = _messageList.firstWhere((c) => c['patientId'] == p.id,
-        orElse: () => {'hasUnread': false});
+    final chat = _messageList.firstWhere((c) => c['patientId'] == p.id, orElse: () => {'hasUnread': false});
     final unread = chat['hasUnread'] == true;
 
     return GestureDetector(
@@ -1379,13 +1118,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0xFFE8EAED), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1395,19 +1128,11 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 Container(
                   width: 70,
                   height: 70,
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFF5F6F7),
-                      borderRadius: BorderRadius.circular(16)),
-                  child: p.profilePhotoUrl != null &&
-                          p.profilePhotoUrl!.isNotEmpty
+                  decoration: BoxDecoration(color: const Color(0xFFF5F6F7), borderRadius: BorderRadius.circular(16)),
+                  child: p.profilePhotoUrl != null && p.profilePhotoUrl!.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.network(p.profilePhotoUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.person,
-                                  size: 36,
-                                  color: Colors.grey)),
+                          child: Image.network(p.profilePhotoUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 36, color: Colors.grey)),
                         )
                       : const Icon(Icons.person, size: 36, color: Colors.grey),
                 ),
@@ -1416,61 +1141,41 @@ class _PatientsScreenState extends State<PatientsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(p.fullName,
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87)),
-                      Text('${p.age} years',
-                          style:
-                              const TextStyle(color: Colors.grey, fontSize: 13)),
+                      Text(p.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      Text('${p.age} years', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                       if (p.conditions.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 4),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                              color: purple.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6)),
-                          child: Text(p.conditions.first,
-                              style: const TextStyle(
-                                  color: purple,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: purple.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text(p.conditions.first, style: const TextStyle(color: purple, fontSize: 12, fontWeight: FontWeight.w600)),
                         ),
                     ],
                   ),
                 ),
                 if (unread)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(
-                        color: Color(0xFFFF5252),
-                        borderRadius: BorderRadius.all(Radius.circular(12))),
-                    child: const Text('!',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: const BoxDecoration(color: Color(0xFFFF5252), borderRadius: BorderRadius.all(Radius.circular(12))),
+                    child: const Text('!', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                   ),
                 const SizedBox(width: 8),
                 AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 300),
-                    child: const Icon(Icons.keyboard_arrow_down,
-                        color: Colors.grey)),
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                ),
               ],
             ),
             if (isExpanded) ...[
               const SizedBox(height: 16),
-              _infoRow(Icons.email_outlined, p.email),
+              _buildInfoRow(Icons.email_outlined, p.email, purple),
               const SizedBox(height: 8),
-              _infoRow(Icons.phone_outlined, p.phone),
+              _buildInfoRow(Icons.phone_outlined, p.phone, purple),
               const SizedBox(height: 8),
-              _infoRow(Icons.location_on_outlined, p.address),
+              _buildInfoRow(Icons.location_on_outlined, p.address, purple),
               const SizedBox(height: 8),
-              if (p.bloodType.isNotEmpty) _infoRow(Icons.bloodtype, p.bloodType),
+              if (p.bloodType.isNotEmpty) _buildInfoRow(Icons.bloodtype, p.bloodType, purple),
               const SizedBox(height: 16),
               const Divider(color: Color(0xFFE8EAED), height: 1),
               const SizedBox(height: 16),
@@ -1499,9 +1204,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                         foregroundColor: purple,
                         side: const BorderSide(color: purple, width: 1.5),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
@@ -1515,9 +1218,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                         backgroundColor: purple,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
@@ -1530,25 +1231,23 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _infoRow(IconData icon, String text, {Color? color}) {
+  Widget _buildInfoRow(IconData icon, String text, Color color) {
     if (text.isEmpty || text == 'Not provided') return const SizedBox.shrink();
     return Row(
       children: [
-        Icon(icon, size: 18, color: color ?? purple),
+        Icon(icon, size: 18, color: color),
         const SizedBox(width: 10),
-        Expanded(
-          child: Text(text,
-              style: const TextStyle(fontSize: 13, color: Colors.black87)),
-        ),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.black87))),
       ],
     );
   }
 
-  Widget _buildBottomMessageNav(BuildContext context, int currentIndex) {
+  Widget _buildBottomNav(BuildContext context, int currentIndex) {
     return Container(
       decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE8EAED), width: 1))),
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE8EAED), width: 1)),
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1556,12 +1255,9 @@ class _PatientsScreenState extends State<PatientsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _navItem(context, Icons.home, 'Home', currentIndex == 0, 0),
-              _navItem(
-                  context, Icons.people, 'Patients', currentIndex == 1, 1),
-              _navItem(context, Icons.medication, 'Medications',
-                  currentIndex == 2, 2),
-              _navItem(context, Icons.calendar_month, 'Calendar',
-                  currentIndex == 3, 3),
+              _navItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
+              _navItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
+              _navItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
               _navItem(context, Icons.person, 'Profile', currentIndex == 4, 4),
             ],
           ),
@@ -1570,8 +1266,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _navItem(BuildContext ctx, IconData icon, String label, bool active,
-      int index) {
+  Widget _navItem(BuildContext ctx, IconData icon, String label, bool active, int index) {
     return Expanded(
       child: InkWell(
         onTap: () {
@@ -1583,51 +1278,41 @@ class _PatientsScreenState extends State<PatientsScreen> {
             3: CalendarScreen(),
             4: ProfileScreen(),
           }[index]!;
-          Navigator.pushReplacement(
-              ctx, MaterialPageRoute(builder: (_) => target));
+          Navigator.pushReplacement(ctx, MaterialPageRoute(builder: (_) => target));
         },
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: active ? purple : Colors.grey, size: 26),
             const SizedBox(height: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: active ? purple : Colors.grey,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w500)),
+            Text(label, style: TextStyle(fontSize: 11, color: active ? purple : Colors.grey, fontWeight: active ? FontWeight.w600 : FontWeight.w500)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBottomSheetHeader(
-      String title, String subtitle, IconData icon, Color color) {
+  Widget _buildSheetHeader(String title, String subtitle, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(bottom: BorderSide(color: Color(0xFFE8EAED), width: 1)),
       ),
       child: Column(
         children: [
           Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2))),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
                 child: Icon(icon, color: color, size: 24),
               ),
               const SizedBox(width: 12),
@@ -1635,20 +1320,12 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87)),
-                    Text(subtitle,
-                        style:
-                            const TextStyle(fontSize: 13, color: Colors.grey)),
+                    Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    Text(subtitle, style: const TextStyle(fontSize: 13, color: Colors.grey)),
                   ],
                 ),
               ),
-              IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: Colors.grey)),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.grey)),
             ],
           ),
         ],
@@ -1656,9 +1333,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 
-  Widget _buildMessageCard(String name, String message, String time,
-      bool isUnread, String photoUrl,
-      {VoidCallback? onTap}) {
+  Widget _buildMsgCard(String name, String message, String time, bool isUnread, String photoUrl, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -1668,62 +1343,37 @@ class _PatientsScreenState extends State<PatientsScreen> {
         decoration: BoxDecoration(
           color: isUnread ? pink.withOpacity(0.05) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color:
-                  isUnread ? pink.withOpacity(0.3) : const Color(0xFFE8EAED)),
+          border: Border.all(color: isUnread ? pink.withOpacity(0.3) : const Color(0xFFE8EAED)),
         ),
         child: Row(
           children: [
             CircleAvatar(
               radius: 24,
               backgroundColor: const Color(0xFFF5F6F7),
-              backgroundImage:
-                  photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-              child: photoUrl.isEmpty
-                  ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'P',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, color: pink))
-                  : null,
+              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'P', style: const TextStyle(fontWeight: FontWeight.bold, color: pink)) : null,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name,
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight:
-                              isUnread ? FontWeight.bold : FontWeight.w600,
-                          color: Colors.black87)),
+                  Text(name, style: TextStyle(fontSize: 15, fontWeight: isUnread ? FontWeight.bold : FontWeight.w600, color: Colors.black87)),
                   const SizedBox(height: 4),
-                  Text(message,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: isUnread ? Colors.black87 : Colors.black54,
-                          fontWeight:
-                              isUnread ? FontWeight.w500 : FontWeight.normal),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                  Text(message, style: TextStyle(fontSize: 13, color: isUnread ? Colors.black87 : Colors.black54, fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(time,
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: isUnread ? pink : Colors.grey,
-                        fontWeight:
-                            isUnread ? FontWeight.w600 : FontWeight.normal)),
+                Text(time, style: TextStyle(fontSize: 11, color: isUnread ? pink : Colors.grey, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal)),
                 if (isUnread)
                   Container(
                     margin: const EdgeInsets.only(top: 6),
                     width: 10,
                     height: 10,
-                    decoration:
-                        const BoxDecoration(color: pink, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: pink, shape: BoxShape.circle),
                   ),
               ],
             ),

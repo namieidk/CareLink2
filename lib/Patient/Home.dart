@@ -26,7 +26,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
 
   PatientProfile? _patientProfile;
   CaregiverProfile? _assignedCaregiver;
-  CaregiverAssignment? _caregiverAssignment;
+  CaregiverAssign? _caregiverAssign;
   List<Medication> _medications = [];
   List<Medication> _todayMedications = [];
   Set<String> _completedTodayIds = {};
@@ -182,14 +182,14 @@ class _PatientHomePageState extends State<PatientHomePage> {
         print('No active caregiver assignment found');
         setState(() {
           _assignedCaregiver = null;
-          _caregiverAssignment = null;
+          _caregiverAssign = null;
         });
         return;
       }
 
       // Step 2: Get the assignment details
       final assignmentDoc = assignmentSnapshot.docs.first;
-      final assignment = CaregiverAssignment.fromFirestore(assignmentDoc);
+      final assignment = CaregiverAssign.fromFirestore(assignmentDoc);
       
       print('Found caregiver assignment: ${assignment.caregiverId}');
 
@@ -210,20 +210,20 @@ class _PatientHomePageState extends State<PatientHomePage> {
         
         setState(() {
           _assignedCaregiver = caregiverProfile;
-          _caregiverAssignment = assignment;
+          _caregiverAssign = assignment;
         });
       } else {
         print('Caregiver profile not found for caregiverId: ${assignment.caregiverId}');
         setState(() {
           _assignedCaregiver = null;
-          _caregiverAssignment = assignment;
+          _caregiverAssign = assignment;
         });
       }
     } catch (e) {
       print('Error loading assigned caregiver: $e');
       setState(() {
         _assignedCaregiver = null;
-        _caregiverAssignment = null;
+        _caregiverAssign = null;
       });
     }
   }

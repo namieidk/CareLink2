@@ -1,7 +1,7 @@
-// lib/models/caregiver_assignment.dart
+// lib/models/caregiver_assign.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class CaregiverAssignment {
+class CaregiverAssign {
   final String id;
   final String patientId;
   final String caregiverId;
@@ -10,7 +10,7 @@ class CaregiverAssignment {
   final DateTime? removedAt;
   final String? removedReason;
 
-  CaregiverAssignment({
+  CaregiverAssign({
     required this.id,
     required this.patientId,
     required this.caregiverId,
@@ -20,10 +20,10 @@ class CaregiverAssignment {
     this.removedReason,
   });
 
-  // Create from Firestore document
-  factory CaregiverAssignment.fromFirestore(DocumentSnapshot doc) {
+  // From Firestore document
+  factory CaregiverAssign.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    return CaregiverAssignment(
+    return CaregiverAssign(
       id: doc.id,
       patientId: data['patientId'] ?? '',
       caregiverId: data['caregiverId'] ?? '',
@@ -34,9 +34,9 @@ class CaregiverAssignment {
     );
   }
 
-  // Create from Map
-  factory CaregiverAssignment.fromMap(Map<String, dynamic> data, String id) {
-    return CaregiverAssignment(
+  // From Map (for testing or local use)
+  factory CaregiverAssign.fromMap(Map<String, dynamic> data, String id) {
+    return CaregiverAssign(
       id: id,
       patientId: data['patientId'] ?? '',
       caregiverId: data['caregiverId'] ?? '',
@@ -47,7 +47,7 @@ class CaregiverAssignment {
     );
   }
 
-  // Convert to Map for Firestore
+  // Convert to Map for Firestore update
   Map<String, dynamic> toMap() {
     return {
       'patientId': patientId,
@@ -59,20 +59,20 @@ class CaregiverAssignment {
     };
   }
 
-  // Convert to Map for creation (uses FieldValue.serverTimestamp)
+  // For creating new assignment
   Map<String, dynamic> toMapForCreation() {
     return {
       'patientId': patientId,
       'caregiverId': caregiverId,
       'assignedAt': FieldValue.serverTimestamp(),
-      'status': status,
+      'status': 'active',
       'removedAt': null,
       'removedReason': null,
     };
   }
 
-  // Copy with method for updates
-  CaregiverAssignment copyWith({
+  // Copy with updates
+  CaregiverAssign copyWith({
     String? id,
     String? patientId,
     String? caregiverId,
@@ -81,7 +81,7 @@ class CaregiverAssignment {
     DateTime? removedAt,
     String? removedReason,
   }) {
-    return CaregiverAssignment(
+    return CaregiverAssign(
       id: id ?? this.id,
       patientId: patientId ?? this.patientId,
       caregiverId: caregiverId ?? this.caregiverId,
@@ -92,13 +92,13 @@ class CaregiverAssignment {
     );
   }
 
-  // Check if assignment is active
+  // Convenience getters
   bool get isActive => status == 'active';
-
-  // Check if assignment is removed
   bool get isRemoved => status == 'removed';
-
-  // Check if assignment is completed
   bool get isCompleted => status == 'completed';
-}
 
+  @override
+  String toString() {
+    return 'CaregiverAssign(id: $id, patientId: $patientId, caregiverId: $caregiverId, status: $status)';
+  }
+}

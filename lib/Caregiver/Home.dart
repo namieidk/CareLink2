@@ -1,11 +1,172 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'patient.dart';
 import 'caremed.dart';
 import 'calendar.dart';
 import 'Profile.dart'; 
+import '../models/caregiver_profile.dart';
 
-class CaregiverHomeScreen extends StatelessWidget {
+class CaregiverHomeScreen extends StatefulWidget {
   const CaregiverHomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<CaregiverHomeScreen> createState() => _CaregiverHomeScreenState();
+}
+
+class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  String _caregiverName = 'Caregiver';
+  String? _caregiverPhotoUrl;
+  List<Map<String, dynamic>> _medicationReminders = [];
+  List<Map<String, dynamic>> _patients = [];
+  int _dueTodayCount = 0;
+  int _totalPatients = 0;
+  int _alertCount = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null) return;
+
+      final String caregiverId = user.uid;
+
+      // Load caregiver profile using CaregiverProfile model
+      final DocumentSnapshot caregiverDoc = await _firestore
+          .collection('caregiver_profiles')
+          .doc(caregiverId)
+          .get();
+
+      if (caregiverDoc.exists) {
+        final caregiverData = caregiverDoc.data() as Map<String, dynamic>;
+        final caregiverProfile = CaregiverProfile.fromMap(caregiverData, caregiverDoc.id);
+        
+        setState(() {
+          _caregiverName = '${caregiverProfile.firstName} ${caregiverProfile.lastName}'.trim();
+          _caregiverPhotoUrl = caregiverProfile.profilePhotoUrl;
+        });
+      }
+
+      // Get active assignments
+      final QuerySnapshot assignmentSnap = await _firestore
+          .collection('caregiver_assignments')
+          .where('caregiverId', isEqualTo: caregiverId)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final List<String> patientIds = assignmentSnap.docs
+          .map((doc) => doc['patientId'] as String)
+          .toList();
+
+      setState(() {
+        _totalPatients = patientIds.length;
+      });
+
+      // Load patient profiles
+      final List<Map<String, dynamic>> patients = [];
+      if (patientIds.isNotEmpty) {
+        final QuerySnapshot patientSnap = await _firestore
+            .collection('patient_profiles')
+            .where(FieldPath.documentId, whereIn: patientIds)
+            .get();
+
+        for (var doc in patientSnap.docs) {
+          final patientData = doc.data() as Map<String, dynamic>;
+          patients.add({
+            'id': doc.id,
+            'name': patientData['fullName'] ?? 'Unknown Patient',
+            'age': patientData['age'] ?? 0,
+            'condition': patientData['conditions'] != null && (patientData['conditions'] as List).isNotEmpty 
+                ? (patientData['conditions'] as List).first 
+                : 'No condition',
+            'photoUrl': patientData['profilePhotoUrl'],
+          });
+        }
+      }
+
+      // Load medications for these patients
+      final List<Map<String, dynamic>> medicationReminders = [];
+      int dueToday = 0;
+
+      if (patientIds.isNotEmpty) {
+        final QuerySnapshot medSnap = await _firestore
+            .collection('medications')
+            .where('patientId', whereIn: patientIds)
+            .where('isActive', isEqualTo: true)
+            .get();
+
+        final now = DateTime.now();
+        final todayStr = _formatTime(now);
+
+        for (var doc in medSnap.docs) {
+          final medData = doc.data() as Map<String, dynamic>;
+          final List<String> times = (medData['times'] as List<dynamic>?)?.map((t) => t.toString()).toList() ?? [];
+          
+          for (var time in times) {
+            final isPending = _compareTime(time, todayStr) >= 0;
+            if (isPending) dueToday++;
+
+            // Find patient name
+            final String patientId = medData['patientId'] as String;
+            final patient = patients.firstWhere(
+              (p) => p['id'] == patientId,
+              orElse: () => {'name': 'Unknown Patient'},
+            );
+
+            medicationReminders.add({
+              'id': doc.id,
+              'time': time,
+              'patientName': patient['name'],
+              'patientId': patientId,
+              'medication': medData['name'] ?? 'Unknown Medication',
+              'dose': medData['dose'] ?? '',
+              'isPending': isPending,
+            });
+          }
+        }
+
+        // Sort by time
+        medicationReminders.sort((a, b) => _compareTime(a['time'], b['time']));
+      }
+
+      // Calculate alerts (simplified - you can customize this logic)
+      final int alerts = dueToday > 3 ? dueToday - 3 : 0;
+
+      setState(() {
+        _patients = patients;
+        _medicationReminders = medicationReminders;
+        _dueTodayCount = dueToday;
+        _alertCount = alerts;
+        _isLoading = false;
+      });
+    } catch (error) {
+      debugPrint('Error loading home data: $error');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTime(DateTime dt) => '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  int _compareTime(String time1, String time2) {
+    try {
+      // Simple string comparison for HH:MM AM/PM format
+      return time1.compareTo(time2);
+    } catch (error) {
+      return -1;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,11 +211,29 @@ class CaregiverHomeScreen extends StatelessWidget {
                                     width: 48,
                                     height: 48,
                                     color: Colors.grey[200],
-                                    child: Icon(
-                                      Icons.person,
-                                      color: Colors.grey[400],
-                                      size: 28,
-                                    ),
+                                    child: _caregiverPhotoUrl != null && _caregiverPhotoUrl!.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: _caregiverPhotoUrl!,
+                                            fit: BoxFit.cover,
+                                            placeholder: (context, url) => Container(
+                                              color: Colors.grey[200],
+                                              child: Icon(
+                                                Icons.person,
+                                                color: Colors.grey[400],
+                                                size: 28,
+                                              ),
+                                            ),
+                                            errorWidget: (context, url, error) => Icon(
+                                              Icons.person,
+                                              color: Colors.grey[400],
+                                              size: 28,
+                                            ),
+                                          )
+                                        : Icon(
+                                            Icons.person,
+                                            color: Colors.grey[400],
+                                            size: 28,
+                                          ),
                                   ),
                                 ),
                               ),
@@ -72,7 +251,7 @@ class CaregiverHomeScreen extends StatelessWidget {
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    'Maria Lopez',
+                                    _caregiverName,
                                     style: TextStyle(
                                       color: Colors.grey[900],
                                       fontSize: 18,
@@ -98,22 +277,23 @@ class CaregiverHomeScreen extends StatelessWidget {
                                       color: Colors.grey[700],
                                       size: 28,
                                     ),
-                                    Positioned(
-                                      right: 0,
-                                      top: 0,
-                                      child: Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: Color(0xFF6C5CE7),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 1.5,
+                                    if (_alertCount > 0)
+                                      Positioned(
+                                        right: 0,
+                                        top: 0,
+                                        child: Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFF6C5CE7),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1.5,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -137,33 +317,35 @@ class CaregiverHomeScreen extends StatelessWidget {
                       SizedBox(height: 24),
                       
                       // Quick Stats
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildQuickStat(
-                              icon: Icons.people_outline,
-                              count: '5',
-                              label: 'My Patients',
+                      _isLoading 
+                          ? _buildLoadingStats()
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: _buildQuickStat(
+                                    icon: Icons.people_outline,
+                                    count: '$_totalPatients',
+                                    label: 'My Patients',
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildQuickStat(
+                                    icon: Icons.medication_outlined,
+                                    count: '$_dueTodayCount',
+                                    label: 'Due Today',
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildQuickStat(
+                                    icon: Icons.warning_amber_outlined,
+                                    count: '$_alertCount',
+                                    label: 'Alerts',
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickStat(
-                              icon: Icons.medication_outlined,
-                              count: '12',
-                              label: 'Due Today',
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickStat(
-                              icon: Icons.warning_amber_outlined,
-                              count: '3',
-                              label: 'Alerts',
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -210,30 +392,22 @@ class CaregiverHomeScreen extends StatelessWidget {
                   SizedBox(height: 12),
                   
                   // Medication Cards
-                  _buildMedicationCard(
-                    time: '08:00 AM',
-                    patientName: 'Roberto Cruz',
-                    medication: 'Metformin 500mg',
-                    isPending: true,
-                  ),
-                  
-                  SizedBox(height: 12),
-                  
-                  _buildMedicationCard(
-                    time: '12:00 PM',
-                    patientName: 'Elena Torres',
-                    medication: 'Lisinopril 10mg',
-                    isPending: false,
-                  ),
-                  
-                  SizedBox(height: 12),
-                  
-                  _buildMedicationCard(
-                    time: '06:00 PM',
-                    patientName: 'Miguel Santos',
-                    medication: 'Atorvastatin 20mg',
-                    isPending: false,
-                  ),
+                  if (_isLoading)
+                    _buildLoadingMedications()
+                  else if (_medicationReminders.isEmpty)
+                    _buildEmptyMedications()
+                  else
+                    ..._medicationReminders.take(3).map((reminder) => Column(
+                      children: [
+                        _buildMedicationCard(
+                          time: reminder['time'],
+                          patientName: reminder['patientName'],
+                          medication: reminder['medication'],
+                          isPending: reminder['isPending'],
+                        ),
+                        SizedBox(height: 12),
+                      ],
+                    )),
                   
                   SizedBox(height: 24),
                   
@@ -250,39 +424,26 @@ class CaregiverHomeScreen extends StatelessWidget {
                   SizedBox(height: 16),
                   
                   // Patient Cards
-                  _buildPatientCard(
-                    context,
-                    name: 'Roberto Cruz',
-                    age: 68,
-                    condition: 'Diabetes Type 2',
-                    medicationCount: 3,
-                    lastChecked: '2 hours ago',
-                    statusColor: Color(0xFF4CAF50),
-                  ),
-                  
-                  SizedBox(height: 12),
-                  
-                  _buildPatientCard(
-                    context,
-                    name: 'Elena Torres',
-                    age: 72,
-                    condition: 'Hypertension',
-                    medicationCount: 2,
-                    lastChecked: '4 hours ago',
-                    statusColor: Color(0xFF4CAF50),
-                  ),
-                  
-                  SizedBox(height: 12),
-                  
-                  _buildPatientCard(
-                    context,
-                    name: 'Miguel Santos',
-                    age: 65,
-                    condition: 'High Cholesterol',
-                    medicationCount: 2,
-                    lastChecked: '1 day ago',
-                    statusColor: Color(0xFFFFA726),
-                  ),
+                  if (_isLoading)
+                    _buildLoadingPatients()
+                  else if (_patients.isEmpty)
+                    _buildEmptyPatients()
+                  else
+                    ..._patients.take(3).map((patient) => Column(
+                      children: [
+                        _buildPatientCard(
+                          context,
+                          name: patient['name'],
+                          age: patient['age'],
+                          condition: patient['condition'],
+                          medicationCount: 0, // You can calculate this if needed
+                          lastChecked: 'Today',
+                          statusColor: Color(0xFF4CAF50),
+                          photoUrl: patient['photoUrl'],
+                        ),
+                        SizedBox(height: 12),
+                      ],
+                    )),
                   
                   SizedBox(height: 24),
                   
@@ -375,6 +536,123 @@ class CaregiverHomeScreen extends StatelessWidget {
       
       // Bottom Navigation Bar
       bottomNavigationBar: _buildBottomNav(context, 0),
+    );
+  }
+
+  // === LOADING WIDGETS ===
+  Widget _buildLoadingStats() {
+    return Row(
+      children: [
+        Expanded(child: _buildQuickStat(icon: Icons.people_outline, count: '...', label: 'My Patients')),
+        SizedBox(width: 12),
+        Expanded(child: _buildQuickStat(icon: Icons.medication_outlined, count: '...', label: 'Due Today')),
+        SizedBox(width: 12),
+        Expanded(child: _buildQuickStat(icon: Icons.warning_amber_outlined, count: '...', label: 'Alerts')),
+      ],
+    );
+  }
+
+  Widget _buildLoadingMedications() {
+    return Column(
+      children: [
+        _buildMedicationCard(time: '...', patientName: 'Loading...', medication: 'Loading...', isPending: true),
+        SizedBox(height: 12),
+        _buildMedicationCard(time: '...', patientName: 'Loading...', medication: 'Loading...', isPending: false),
+      ],
+    );
+  }
+
+  Widget _buildLoadingPatients() {
+    return Column(
+      children: [
+        _buildPatientCard(
+          context, 
+          name: 'Loading...', 
+          age: 0, 
+          condition: 'Loading...', 
+          medicationCount: 0, 
+          lastChecked: '...', 
+          statusColor: Colors.grey,
+          photoUrl: null,
+        ),
+        SizedBox(height: 12),
+        _buildPatientCard(
+          context, 
+          name: 'Loading...', 
+          age: 0, 
+          condition: 'Loading...', 
+          medicationCount: 0, 
+          lastChecked: '...', 
+          statusColor: Colors.grey,
+          photoUrl: null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyMedications() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Color(0xFFFDFDFE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.medication_outlined, size: 48, color: Colors.grey[400]),
+          SizedBox(height: 12),
+          Text(
+            'No medications due',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'All medications are up to date',
+            style: TextStyle(
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPatients() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Color(0xFFFDFDFE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.people_outline, size: 48, color: Colors.grey[400]),
+          SizedBox(height: 12),
+          Text(
+            'No patients assigned',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Patients will appear here once assigned',
+            style: TextStyle(
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -566,6 +844,7 @@ class CaregiverHomeScreen extends StatelessWidget {
     required int medicationCount,
     required String lastChecked,
     required Color statusColor,
+    required String? photoUrl,
   }) {
     return InkWell(
       onTap: () {
@@ -602,11 +881,32 @@ class CaregiverHomeScreen extends StatelessWidget {
                 color: Color(0xFFF5F6F7),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                Icons.person,
-                size: 32,
-                color: Colors.grey[400],
-              ),
+              child: photoUrl != null && photoUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[200],
+                          child: Icon(
+                            Icons.person,
+                            size: 32,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Icon(
+                          Icons.person,
+                          size: 32,
+                          color: Colors.grey[400],
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      Icons.person,
+                      size: 32,
+                      color: Colors.grey[400],
+                    ),
             ),
             SizedBox(width: 16),
             Expanded(
