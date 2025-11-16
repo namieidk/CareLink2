@@ -1,10 +1,58 @@
+// ========================================
+// FILE: doctor_schedule.dart
+// Location: lib/models/doctor_schedule.dart
+// ========================================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Booking class to store patient details with time slot
+class Booking {
+  final String timeSlot;
+  final String? patientId;
+  final String? patientName;
+  final DateTime? bookedAt;
+  final String? appointmentType;
+  final String? notes;
+
+  Booking({
+    required this.timeSlot,
+    this.patientId,
+    this.patientName,
+    this.bookedAt,
+    this.appointmentType,
+    this.notes,
+  });
+
+  factory Booking.fromMap(Map<String, dynamic> map) {
+    return Booking(
+      timeSlot: map['timeSlot'] ?? '',
+      patientId: map['patientId'],
+      patientName: map['patientName'],
+      bookedAt: map['bookedAt'] != null 
+          ? (map['bookedAt'] as Timestamp).toDate() 
+          : null,
+      appointmentType: map['appointmentType'],
+      notes: map['notes'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'timeSlot': timeSlot,
+      if (patientId != null) 'patientId': patientId,
+      if (patientName != null) 'patientName': patientName,
+      if (bookedAt != null) 'bookedAt': Timestamp.fromDate(bookedAt!),
+      if (appointmentType != null) 'appointmentType': appointmentType,
+      if (notes != null) 'notes': notes,
+    };
+  }
+}
 
 class DoctorSchedule {
   final String id; // Doctor ID (references doctor_profiles)
   final String doctorName;
-  final Map<String, List<String>> schedule; // Day -> List of time slots
-  final Map<String, List<String>> bookings; // Day -> List of booked time slots
+  final Map<String, List<String>> schedule; // Date string (YYYY-MM-DD) -> List of time slots
+  final Map<String, List<Booking>> bookings; // Date string (YYYY-MM-DD) -> List of bookings with patient details
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -25,7 +73,7 @@ class DoctorSchedule {
       id: doc.id,
       doctorName: data['doctorName'] ?? '',
       schedule: _parseScheduleMap(data['schedule']),
-      bookings: _parseScheduleMap(data['bookings']),
+      bookings: _parseBookingsMap(data['bookings']),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -37,13 +85,13 @@ class DoctorSchedule {
       id: documentId,
       doctorName: data['doctorName'] ?? '',
       schedule: _parseScheduleMap(data['schedule']),
-      bookings: _parseScheduleMap(data['bookings']),
+      bookings: _parseBookingsMap(data['bookings']),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
-  // Helper method to parse schedule/bookings map
+  // Helper method to parse schedule map
   static Map<String, List<String>> _parseScheduleMap(dynamic data) {
     if (data == null) return {};
     
@@ -56,12 +104,37 @@ class DoctorSchedule {
     });
   }
 
+  // Helper method to parse bookings map with patient details
+  static Map<String, List<Booking>> _parseBookingsMap(dynamic data) {
+    if (data == null) return {};
+    
+    final Map<String, dynamic> rawMap = Map<String, dynamic>.from(data);
+    return rawMap.map((key, value) {
+      if (value is List) {
+        List<Booking> bookingsList = [];
+        for (var item in value) {
+          if (item is String) {
+            // Legacy format: just time slots
+            bookingsList.add(Booking(timeSlot: item));
+          } else if (item is Map) {
+            // New format: booking objects with patient details
+            bookingsList.add(Booking.fromMap(Map<String, dynamic>.from(item)));
+          }
+        }
+        return MapEntry(key, bookingsList);
+      }
+      return MapEntry(key, <Booking>[]);
+    });
+  }
+
   // Convert DoctorSchedule to Map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'doctorName': doctorName,
       'schedule': schedule,
-      'bookings': bookings,
+      'bookings': bookings.map((key, value) => 
+        MapEntry(key, value.map((booking) => booking.toMap()).toList())
+      ),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -72,7 +145,7 @@ class DoctorSchedule {
     String? id,
     String? doctorName,
     Map<String, List<String>>? schedule,
-    Map<String, List<String>>? bookings,
+    Map<String, List<Booking>>? bookings,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -80,62 +153,75 @@ class DoctorSchedule {
       id: id ?? this.id,
       doctorName: doctorName ?? this.doctorName,
       schedule: schedule ?? Map<String, List<String>>.from(this.schedule),
-      bookings: bookings ?? Map<String, List<String>>.from(this.bookings),
+      bookings: bookings ?? Map<String, List<Booking>>.from(this.bookings),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
-  // Get available slots for a specific day
-  List<String> getAvailableSlotsForDay(String day) {
-    return schedule[day] ?? [];
+  // Helper method to convert DateTime to date string (YYYY-MM-DD)
+  static String dateToString(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  // Get booked slots for a specific day
-  List<String> getBookedSlotsForDay(String day) {
-    return bookings[day] ?? [];
+  // Helper method to convert date string to DateTime
+  static DateTime? stringToDate(String dateString) {
+    try {
+      return DateTime.parse(dateString);
+    } catch (e) {
+      return null;
+    }
   }
 
-  // Get free slots (available but not booked) for a specific day
-  List<String> getFreeSlotsForDay(String day) {
-    final available = getAvailableSlotsForDay(day);
-    final booked = getBookedSlotsForDay(day);
+  // Get available slots for a specific date
+  List<String> getAvailableSlotsForDate(DateTime date) {
+    final dateString = dateToString(date);
+    return schedule[dateString] ?? [];
+  }
+
+  // Get booked slots for a specific date (just the time slots)
+  List<String> getBookedSlotsForDate(DateTime date) {
+    final dateString = dateToString(date);
+    final dateBookings = bookings[dateString] ?? [];
+    return dateBookings.map((b) => b.timeSlot).toList();
+  }
+
+  // Get booking details for a specific date
+  List<Booking> getBookingDetailsForDate(DateTime date) {
+    final dateString = dateToString(date);
+    return bookings[dateString] ?? [];
+  }
+
+  // Get free slots (available but not booked) for a specific date
+  List<String> getFreeSlotsForDate(DateTime date) {
+    final available = getAvailableSlotsForDate(date);
+    final booked = getBookedSlotsForDate(date);
     return available.where((slot) => !booked.contains(slot)).toList();
   }
 
-  // Check if a specific slot is available
-  bool isSlotAvailable(String day, String time) {
-    final available = getAvailableSlotsForDay(day);
-    final booked = getBookedSlotsForDay(day);
+  // Check if a specific slot is available on a date
+  bool isSlotAvailable(DateTime date, String time) {
+    final available = getAvailableSlotsForDate(date);
+    final booked = getBookedSlotsForDate(date);
     return available.contains(time) && !booked.contains(time);
   }
 
-  // Check if a specific slot is booked
-  bool isSlotBooked(String day, String time) {
-    final booked = getBookedSlotsForDay(day);
+  // Check if a specific slot is booked on a date
+  bool isSlotBooked(DateTime date, String time) {
+    final booked = getBookedSlotsForDate(date);
     return booked.contains(time);
   }
 
-  // Add a booking
-  DoctorSchedule addBooking(String day, String time) {
-    final newBookings = Map<String, List<String>>.from(bookings);
-    if (!newBookings.containsKey(day)) {
-      newBookings[day] = [];
+  // Add a booking with patient details for a specific date
+  DoctorSchedule addBooking(DateTime date, Booking booking) {
+    final dateString = dateToString(date);
+    final newBookings = Map<String, List<Booking>>.from(bookings);
+    if (!newBookings.containsKey(dateString)) {
+      newBookings[dateString] = [];
     }
-    if (!newBookings[day]!.contains(time)) {
-      newBookings[day]!.add(time);
-    }
-    return copyWith(
-      bookings: newBookings,
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  // Remove a booking
-  DoctorSchedule removeBooking(String day, String time) {
-    final newBookings = Map<String, List<String>>.from(bookings);
-    if (newBookings.containsKey(day)) {
-      newBookings[day]!.remove(time);
+    // Check if slot is already booked
+    if (!newBookings[dateString]!.any((b) => b.timeSlot == booking.timeSlot)) {
+      newBookings[dateString]!.add(booking);
     }
     return copyWith(
       bookings: newBookings,
@@ -143,17 +229,30 @@ class DoctorSchedule {
     );
   }
 
-  // Get total number of available slots for the week
+  // Remove a booking from a specific date
+  DoctorSchedule removeBooking(DateTime date, String time) {
+    final dateString = dateToString(date);
+    final newBookings = Map<String, List<Booking>>.from(bookings);
+    if (newBookings.containsKey(dateString)) {
+      newBookings[dateString]!.removeWhere((b) => b.timeSlot == time);
+    }
+    return copyWith(
+      bookings: newBookings,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  // Get total number of available slots across all dates
   int getTotalAvailableSlots() {
     return schedule.values.fold(0, (sum, slots) => sum + slots.length);
   }
 
-  // Get total number of booked slots for the week
+  // Get total number of booked slots across all dates
   int getTotalBookedSlots() {
-    return bookings.values.fold(0, (sum, slots) => sum + slots.length);
+    return bookings.values.fold(0, (sum, bookingsList) => sum + bookingsList.length);
   }
 
-  // Get total number of free slots for the week
+  // Get total number of free slots across all dates
   int getTotalFreeSlots() {
     return getTotalAvailableSlots() - getTotalBookedSlots();
   }
@@ -165,19 +264,57 @@ class DoctorSchedule {
     return (getTotalBookedSlots() / total) * 100;
   }
 
-  // Get all working days
-  List<String> getWorkingDays() {
-    return schedule.keys.toList();
+  // Get all scheduled dates
+  List<DateTime> getScheduledDates() {
+    return schedule.keys
+        .map((dateString) => stringToDate(dateString))
+        .where((date) => date != null)
+        .map((date) => date!)
+        .toList()
+      ..sort();
   }
 
-  // Check if doctor works on a specific day
-  bool worksOnDay(String day) {
-    return schedule.containsKey(day) && schedule[day]!.isNotEmpty;
+  // Check if doctor has schedule on a specific date
+  bool hasScheduleOnDate(DateTime date) {
+    final dateString = dateToString(date);
+    return schedule.containsKey(dateString) && schedule[dateString]!.isNotEmpty;
+  }
+
+  // Get schedule for a date range
+  Map<DateTime, List<String>> getScheduleForDateRange(DateTime start, DateTime end) {
+    final Map<DateTime, List<String>> rangeSchedule = {};
+    
+    for (var entry in schedule.entries) {
+      final date = stringToDate(entry.key);
+      if (date != null && 
+          (date.isAfter(start) || date.isAtSameMomentAs(start)) &&
+          (date.isBefore(end) || date.isAtSameMomentAs(end))) {
+        rangeSchedule[date] = entry.value;
+      }
+    }
+    
+    return rangeSchedule;
+  }
+
+  // Get bookings for a date range
+  Map<DateTime, List<Booking>> getBookingsForDateRange(DateTime start, DateTime end) {
+    final Map<DateTime, List<Booking>> rangeBookings = {};
+    
+    for (var entry in bookings.entries) {
+      final date = stringToDate(entry.key);
+      if (date != null && 
+          (date.isAfter(start) || date.isAtSameMomentAs(start)) &&
+          (date.isBefore(end) || date.isAtSameMomentAs(end))) {
+        rangeBookings[date] = entry.value;
+      }
+    }
+    
+    return rangeBookings;
   }
 
   @override
   String toString() {
-    return 'DoctorSchedule(id: $id, doctorName: $doctorName, workingDays: ${getWorkingDays().length})';
+    return 'DoctorSchedule(id: $id, doctorName: $doctorName, scheduledDates: ${schedule.length})';
   }
 
   @override
@@ -195,44 +332,48 @@ class DoctorSchedule {
   }
 }
 
-// Helper class for creating default schedules
-class DefaultScheduleGenerator {
-  // Generate a standard 9-5 weekday schedule
-  static Map<String, List<String>> generateStandardSchedule() {
-    return {
-      'Monday': _generateTimeSlots(9, 17),
-      'Tuesday': _generateTimeSlots(9, 17),
-      'Wednesday': _generateTimeSlots(9, 17),
-      'Thursday': _generateTimeSlots(9, 17),
-      'Friday': _generateTimeSlots(9, 17),
-    };
+// Helper class for creating date-based schedules
+class DateScheduleGenerator {
+  // Generate schedule for a date range with specific time slots
+  static Map<String, List<String>> generateScheduleForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+    List<String> timeSlots, {
+    List<int>? excludeWeekdays, // 1 = Monday, 7 = Sunday
+  }) {
+    final Map<String, List<String>> schedule = {};
+    final excludeDays = excludeWeekdays ?? [];
+    
+    DateTime currentDate = startDate;
+    while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
+      // Check if this weekday should be excluded
+      if (!excludeDays.contains(currentDate.weekday)) {
+        final dateString = DoctorSchedule.dateToString(currentDate);
+        schedule[dateString] = List<String>.from(timeSlots);
+      }
+      currentDate = currentDate.add(const Duration(days: 1));
+    }
+    
+    return schedule;
   }
 
-  // Generate morning shift schedule
-  static Map<String, List<String>> generateMorningSchedule() {
-    return {
-      'Monday': _generateTimeSlots(8, 13),
-      'Tuesday': _generateTimeSlots(8, 13),
-      'Wednesday': _generateTimeSlots(8, 13),
-      'Thursday': _generateTimeSlots(8, 13),
-      'Friday': _generateTimeSlots(8, 13),
-      'Saturday': _generateTimeSlots(8, 12),
-    };
-  }
-
-  // Generate afternoon shift schedule
-  static Map<String, List<String>> generateAfternoonSchedule() {
-    return {
-      'Monday': _generateTimeSlots(13, 18),
-      'Tuesday': _generateTimeSlots(13, 18),
-      'Wednesday': _generateTimeSlots(13, 18),
-      'Thursday': _generateTimeSlots(13, 18),
-      'Friday': _generateTimeSlots(13, 18),
-    };
+  // Generate schedule for specific dates
+  static Map<String, List<String>> generateScheduleForSpecificDates(
+    List<DateTime> dates,
+    List<String> timeSlots,
+  ) {
+    final Map<String, List<String>> schedule = {};
+    
+    for (var date in dates) {
+      final dateString = DoctorSchedule.dateToString(date);
+      schedule[dateString] = List<String>.from(timeSlots);
+    }
+    
+    return schedule;
   }
 
   // Generate time slots between start and end hour (hourly intervals)
-  static List<String> _generateTimeSlots(int startHour, int endHour) {
+  static List<String> generateTimeSlots(int startHour, int endHour) {
     List<String> slots = [];
     for (int hour = startHour; hour < endHour; hour++) {
       slots.add('${hour.toString().padLeft(2, '0')}:00');
@@ -250,16 +391,19 @@ class DefaultScheduleGenerator {
     return slots;
   }
 
-  // Generate custom schedule for specific days
-  static Map<String, List<String>> generateCustomSchedule(
-    Map<String, List<int>> dayHours,
+  // Generate time slots with custom minute intervals
+  static List<String> generateCustomIntervalSlots(
+    int startHour,
+    int endHour,
+    int intervalMinutes,
   ) {
-    return dayHours.map((day, hours) {
-      if (hours.length >= 2) {
-        return MapEntry(day, _generateTimeSlots(hours[0], hours[1]));
+    List<String> slots = [];
+    for (int hour = startHour; hour < endHour; hour++) {
+      for (int minute = 0; minute < 60; minute += intervalMinutes) {
+        slots.add('${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
       }
-      return MapEntry(day, <String>[]);
-    });
+    }
+    return slots;
   }
 }
 
@@ -307,47 +451,69 @@ class DoctorScheduleService {
     });
   }
 
-  // Add a booking to a doctor's schedule
-  Future<void> addBooking(String doctorId, String day, String time) async {
+  // Add a booking to a doctor's schedule for a specific date
+  Future<void> addBooking(String doctorId, DateTime date, Booking booking) async {
     try {
       final schedule = await getSchedule(doctorId);
       if (schedule == null) {
         throw Exception('Schedule not found');
       }
 
-      final updatedSchedule = schedule.addBooking(day, time);
+      final updatedSchedule = schedule.addBooking(date, booking);
       await saveSchedule(updatedSchedule);
     } catch (e) {
       throw Exception('Failed to add booking: $e');
     }
   }
 
-  // Remove a booking from a doctor's schedule
-  Future<void> removeBooking(String doctorId, String day, String time) async {
+  // Remove a booking from a doctor's schedule for a specific date
+  Future<void> removeBooking(String doctorId, DateTime date, String time) async {
     try {
       final schedule = await getSchedule(doctorId);
       if (schedule == null) {
         throw Exception('Schedule not found');
       }
 
-      final updatedSchedule = schedule.removeBooking(day, time);
+      final updatedSchedule = schedule.removeBooking(date, time);
       await saveSchedule(updatedSchedule);
     } catch (e) {
       throw Exception('Failed to remove booking: $e');
     }
   }
 
-  // Create initial schedule for a doctor
+  // Create initial schedule for a doctor with date range
   Future<void> createInitialSchedule(
     String doctorId,
     String doctorName, {
     Map<String, List<String>>? customSchedule,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String>? defaultTimeSlots,
+    List<int>? excludeWeekdays, // Optional: exclude specific weekdays
   }) async {
     try {
+      Map<String, List<String>> scheduleMap;
+      
+      if (customSchedule != null) {
+        scheduleMap = customSchedule;
+      } else if (startDate != null && endDate != null && defaultTimeSlots != null) {
+        // Generate schedule for date range
+        // Only exclude weekdays if explicitly provided
+        scheduleMap = DateScheduleGenerator.generateScheduleForDateRange(
+          startDate,
+          endDate,
+          defaultTimeSlots,
+          excludeWeekdays: excludeWeekdays, // Don't exclude by default
+        );
+      } else {
+        // Create empty schedule
+        scheduleMap = {};
+      }
+
       final schedule = DoctorSchedule(
         id: doctorId,
         doctorName: doctorName,
-        schedule: customSchedule ?? DefaultScheduleGenerator.generateStandardSchedule(),
+        schedule: scheduleMap,
         bookings: {},
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -359,7 +525,55 @@ class DoctorScheduleService {
     }
   }
 
-  // Update doctor's working schedule
+  // Add schedule for a specific date
+  Future<void> addDateSchedule(
+    String doctorId,
+    DateTime date,
+    List<String> timeSlots,
+  ) async {
+    try {
+      final dateString = DoctorSchedule.dateToString(date);
+      final schedule = await getSchedule(doctorId);
+      
+      if (schedule == null) {
+        throw Exception('Schedule not found');
+      }
+
+      final newSchedule = Map<String, List<String>>.from(schedule.schedule);
+      newSchedule[dateString] = timeSlots;
+
+      await _firestore.collection(_collection).doc(doctorId).update({
+        'schedule': newSchedule,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (e) {
+      throw Exception('Failed to add date schedule: $e');
+    }
+  }
+
+  // Remove schedule for a specific date
+  Future<void> removeDateSchedule(String doctorId, DateTime date) async {
+    try {
+      final dateString = DoctorSchedule.dateToString(date);
+      final schedule = await getSchedule(doctorId);
+      
+      if (schedule == null) {
+        throw Exception('Schedule not found');
+      }
+
+      final newSchedule = Map<String, List<String>>.from(schedule.schedule);
+      newSchedule.remove(dateString);
+
+      await _firestore.collection(_collection).doc(doctorId).update({
+        'schedule': newSchedule,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (e) {
+      throw Exception('Failed to remove date schedule: $e');
+    }
+  }
+
+  // Update doctor's entire schedule
   Future<void> updateSchedule(
     String doctorId,
     Map<String, List<String>> newSchedule,
@@ -395,18 +609,37 @@ class DoctorScheduleService {
     }
   }
 
-  // Check if a slot is available
+  // Check if a slot is available on a specific date
   Future<bool> isSlotAvailable(
     String doctorId,
-    String day,
+    DateTime date,
     String time,
   ) async {
     try {
       final schedule = await getSchedule(doctorId);
       if (schedule == null) return false;
-      return schedule.isSlotAvailable(day, time);
+      return schedule.isSlotAvailable(date, time);
     } catch (e) {
       return false;
+    }
+  }
+
+  // Get available dates in a range
+  Future<List<DateTime>> getAvailableDates(
+    String doctorId,
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    try {
+      final schedule = await getSchedule(doctorId);
+      if (schedule == null) return [];
+      
+      return schedule.getScheduledDates().where((date) {
+        return (date.isAfter(startDate) || date.isAtSameMomentAs(startDate)) &&
+               (date.isBefore(endDate) || date.isAtSameMomentAs(endDate));
+      }).toList();
+    } catch (e) {
+      return [];
     }
   }
 }

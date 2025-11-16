@@ -10,6 +10,9 @@ import 'DoctorSchedule.dart';
 import 'Profile/EditProfile.dart';
 import '../models/doctor_profile.dart';
 
+// ADD THIS IMPORT
+import '../Signin/up/Signin.dart'; // <-- YOUR LOGIN SCREEN
+
 class DoctorProfileScreen extends StatefulWidget {
   const DoctorProfileScreen({super.key});
 
@@ -906,127 +909,87 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     return number.toString();
   }
 
-  // Get specialty list from profile (assumes comma-separated or list)
   List<String> _getSpecialtyList() {
     if (_doctorProfile?.specialty == null || _doctorProfile!.specialty.isEmpty) {
       return [];
     }
-    // If specialty is stored as comma-separated string
     if (_doctorProfile!.specialty.contains(',')) {
       return _doctorProfile!.specialty.split(',').map((s) => s.trim()).toList();
     }
-    // Otherwise return as single item
     return [_doctorProfile!.specialty];
   }
 
-  // Get languages list from profile (assumes comma-separated or list)
   List<String> _getLanguagesList() {
     if (_doctorProfile?.languages == null || _doctorProfile!.languages.isEmpty) {
       return [];
     }
-    // If languages is stored as comma-separated string
     if (_doctorProfile!.languages.contains(',')) {
       return _doctorProfile!.languages.split(',').map((s) => s.trim()).toList();
     }
-    // Otherwise return as single item
     return [_doctorProfile!.languages];
   }
 
   void _openSettings() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening settings...'),
-        backgroundColor: Colors.blue,
-      ),
+      const SnackBar(content: Text('Opening settings...'), backgroundColor: Colors.blue),
     );
   }
 
   void _openPrivacySettings() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening privacy settings...'),
-        backgroundColor: Colors.blue,
-      ),
+      const SnackBar(content: Text('Opening privacy settings...'), backgroundColor: Colors.blue),
     );
   }
 
   void _openHelp() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening help center...'),
-        backgroundColor: Colors.blue,
-      ),
+      const SnackBar(content: Text('Opening help center...'), backgroundColor: Colors.blue),
     );
   }
 
   void _openTerms() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening terms and policies...'),
-        backgroundColor: Colors.blue,
-      ),
+      const SnackBar(content: Text('Opening terms and policies...'), backgroundColor: Colors.blue),
     );
   }
 
+  // FULLY FUNCTIONAL LOGOUT
   void _logout() async {
-    showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Logout'),
           ),
-          title: const Text(
-            'Logout',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await _auth.signOut();
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Logged out successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                    // Navigate to login screen
-                    // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error logging out: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _auth.signOut();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logged out successfully!'), backgroundColor: Colors.green),
+        );
+
+        // FULL NAVIGATION TO LOGIN + CLEAR STACK
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SignInScreen()),
+          (route) => false, // Remove all previous routes
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

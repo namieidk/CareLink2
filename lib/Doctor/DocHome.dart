@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Import other doctor screens
 import 'DoctorPatients.dart';
 import 'DoctorSchedule.dart';
 import 'DoctorProfile.dart';
+
+// Import the doctor profile model
+import '../../models/doctor_profile.dart';
 
 class DoctorHomePage extends StatefulWidget {
   const DoctorHomePage({Key? key}) : super(key: key);
@@ -25,41 +28,173 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
   static const Color background = Color(0xFFF8F9FA);
   static const Color cardShadow = Color(0x12000000);
 
-  // Sample doctor data
-  final String doctorName = "Dr. Sarah Johnson";
-  final String specialty = "Cardiologist";
-  final String hospital = "City Hospital";
-
   // Firestore reference
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  // Doctor profile
+  DoctorProfile? _doctorProfile;
+  bool _isLoading = true;
+  String? _currentDoctorId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDoctorProfile();
+  }
+
+  Future<void> _loadDoctorProfile() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        _currentDoctorId = user.uid;
+        
+        final docSnapshot = await _firestore
+            .collection('doctor_profiles')
+            .doc(user.uid)
+            .get();
+
+        if (docSnapshot.exists) {
+          setState(() {
+            _doctorProfile = DoctorProfile.fromFirestore(docSnapshot);
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading doctor profile: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
   
   // Streams for real-time data
-  Stream<int> get todayAppointmentsStream => 
-      _firestore.collection('appointments')
-          .where('doctorId', isEqualTo: 'current_doctor_id')
-          .where('date', isEqualTo: DateFormat('yyyy-MM-dd').format(DateTime.now()))
-          .snapshots()
-          .map((snapshot) => snapshot.size);
+  Stream<int> get todayAppointmentsStream {
+    if (_currentDoctorId == null) return Stream.value(0);
+    
+    return _firestore
+        .collection('doctor_schedules')
+        .doc(_currentDoctorId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return 0;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      final bookings = data['bookings'] as Map<String, dynamic>? ?? {};
+      
+      // Get today's date string (YYYY-MM-DD format)
+      final today = DateTime.now();
+      final dateString = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      
+      if (bookings.containsKey(dateString)) {
+        final todayBookings = bookings[dateString] as List<dynamic>? ?? [];
+        return todayBookings.length;
+      }
+      
+      return 0;
+    });
+  }
   
-  Stream<int> get totalPatientsStream => 
-      _firestore.collection('patients')
-          .where('assignedDoctor', isEqualTo: 'current_doctor_id')
-          .snapshots()
-          .map((snapshot) => snapshot.size);
+  Stream<int> get totalPatientsStream {
+    if (_currentDoctorId == null) return Stream.value(0);
+    
+    // Get total unique patients from doctor's bookings
+    return _firestore
+        .collection('doctor_schedules')
+        .doc(_currentDoctorId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return 0;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      final bookings = data['bookings'] as Map<String, dynamic>? ?? {};
+      
+      // Collect all unique patient IDs from all bookings
+      final patientIds = <String>{};
+      
+      bookings.forEach((dateString, bookingsList) {
+        if (bookingsList is List) {
+          for (var booking in bookingsList) {
+            if (booking is Map<String, dynamic>) {
+              final patientId = booking['patientId'] as String?;
+              if (patientId != null && patientId.isNotEmpty) {
+                patientIds.add(patientId);
+              }
+            }
+          }
+        }
+      });
+      
+      return patientIds.length;
+    });
+  }
   
-  Stream<int> get pendingTasksStream => 
-      _firestore.collection('tasks')
-          .where('doctorId', isEqualTo: 'current_doctor_id')
-          .where('status', isEqualTo: 'pending')
-          .snapshots()
-          .map((snapshot) => snapshot.size);
+  Stream<int> get pendingTasksStream {
+    if (_currentDoctorId == null) return Stream.value(0);
+    
+    return _firestore
+        .collection('tasks')
+        .where('doctorId', isEqualTo: _currentDoctorId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
   
-  Stream<int> get unreadMessagesStream => 
-      _firestore.collection('messages')
-          .where('doctorId', isEqualTo: 'current_doctor_id')
-          .where('read', isEqualTo: false)
-          .snapshots()
-          .map((snapshot) => snapshot.size);
+  Stream<int> get upcomingAppointmentsStream {
+    if (_currentDoctorId == null) return Stream.value(0);
+    
+    return _firestore
+        .collection('doctor_schedules')
+        .doc(_currentDoctorId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return 0;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      final bookings = data['bookings'] as Map<String, dynamic>? ?? {};
+      
+      int upcomingCount = 0;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      
+      bookings.forEach((dateString, bookingsList) {
+        try {
+          final dateParts = dateString.split('-');
+          if (dateParts.length == 3) {
+            final year = int.parse(dateParts[0]);
+            final month = int.parse(dateParts[1]);
+            final day = int.parse(dateParts[2]);
+            final date = DateTime(year, month, day);
+            
+            // Include today and future dates
+            if (date.isAfter(today) || date.isAtSameMomentAs(today)) {
+              if (bookingsList is List) {
+                upcomingCount += bookingsList.length;
+              }
+            }
+          }
+        } catch (e) {
+          // Skip invalid date strings
+          print('Error parsing date: $dateString - $e');
+        }
+      });
+      
+      return upcomingCount;
+    });
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
 
   // BOTTOM NAVIGATION
   Widget _bottomNav(BuildContext context, int active) => Container(
@@ -137,8 +272,43 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final String currentTime = DateFormat('h:mm a').format(DateTime.now());
-    final String greeting = _getGreeting();
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: background,
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(primary),
+          ),
+        ),
+      );
+    }
+
+    if (_doctorProfile == null) {
+      return Scaffold(
+        backgroundColor: background,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                'Doctor profile not found',
+                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loadDoctorProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primary,
+                ),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: background,
@@ -146,32 +316,37 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
         child: Column(
           children: [
             // HEADER
-            _header(greeting, currentTime),
+            _header(),
 
             // SCROLLABLE CONTENT
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
+              child: RefreshIndicator(
+                onRefresh: _loadDoctorProfile,
+                color: primary,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
 
-                    // STATS GRID (2 × 2)
-                    _statsGrid(),
+                      // STATS GRID (2 × 2)
+                      _statsGrid(),
 
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // QUICK ACTIONS
-                    _quickActions(),
+                      // QUICK ACTIONS
+                      _quickActions(),
 
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // WELCOME MESSAGE
-                    _welcomeMessage(),
+                      // WELCOME MESSAGE
+                      _welcomeMessage(),
 
-                    const SizedBox(height: 40),
-                  ],
+                      const SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -183,86 +358,103 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
   }
 
   // HEADER
-  Widget _header(String greeting, String currentTime) => Container(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: primary,
-                  child: Text(
-                    _getInitials(doctorName),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        doctorName,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        specialty,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        hospital,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+  Widget _header() => Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [primary, accent],
+          ),
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(24),
+            bottomRight: Radius.circular(24),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: primary.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerLeft,
+          ],
+        ),
+        child: Row(
+          children: [
+            // Doctor Profile Image or Initials
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: _doctorProfile!.profileImageUrl != null &&
+                      _doctorProfile!.profileImageUrl!.isNotEmpty
+                  ? ClipOval(
+                      child: Image.network(
+                        _doctorProfile!.profileImageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              _doctorProfile!.getInitials(),
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: primary,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Center(
+                      child: Text(
+                        _doctorProfile!.getInitials(),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: primary,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "$greeting, Dr. Johnson!",
+                    _doctorProfile!.name,
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "Today is ${DateFormat('EEEE, MMMM d').format(DateTime.now())}",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[700],
+                    _doctorProfile!.specialty,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
-                    "Current time: $currentTime",
+                    _doctorProfile!.hospital,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withOpacity(0.9),
                     ),
                   ),
                 ],
@@ -286,28 +478,24 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
             icon: Icons.event_available,
             color: info,
             label: 'Today\'s Appointments',
-            trend: '+2',
           ),
           _buildStreamStatCard(
             stream: totalPatientsStream,
             icon: Icons.people_alt,
             color: success,
             label: 'Total Patients',
-            trend: '+5',
+          ),
+          _buildStreamStatCard(
+            stream: upcomingAppointmentsStream,
+            icon: Icons.calendar_today,
+            color: primary,
+            label: 'Upcoming Appointments',
           ),
           _buildStreamStatCard(
             stream: pendingTasksStream,
             icon: Icons.assignment,
             color: warning,
             label: 'Pending Tasks',
-            trend: '-1',
-          ),
-          _buildStreamStatCard(
-            stream: unreadMessagesStream,
-            icon: Icons.message,
-            color: accent,
-            label: 'Unread Messages',
-            trend: '+3',
           ),
         ],
       );
@@ -318,30 +506,30 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
     required IconData icon,
     required Color color,
     required String label,
-    required String trend,
   }) {
     return StreamBuilder<int>(
       stream: stream,
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _bigStatLoading(icon: icon, color: color, label: label);
+        }
+        
         final count = snapshot.data ?? 0;
         return _bigStat(
           icon: icon,
           color: color,
           value: count.toString(),
           label: label,
-          trend: trend,
         );
       },
     );
   }
 
-  // SINGLE BIG STAT CARD
-  Widget _bigStat({
+  // LOADING STAT CARD
+  Widget _bigStatLoading({
     required IconData icon,
     required Color color,
-    required String value,
     required String label,
-    required String trend,
   }) =>
       Container(
         padding: const EdgeInsets.all(16),
@@ -355,52 +543,67 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Icon and trend
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, size: 24, color: color),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: trend.startsWith('+') ? success.withOpacity(0.1) : 
-                           trend.startsWith('-') ? Colors.red.withOpacity(0.1) : 
-                           Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        trend.startsWith('+') ? Icons.trending_up : 
-                        trend.startsWith('-') ? Icons.trending_down : Icons.trending_flat,
-                        size: 12,
-                        color: trend.startsWith('+') ? success : 
-                               trend.startsWith('-') ? Colors.red : Colors.grey,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(trend,
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: trend.startsWith('+') ? success : 
-                                     trend.startsWith('-') ? Colors.red : Colors.grey,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 24, color: color),
+            ),
+            const Spacer(),
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      );
+
+  // SINGLE BIG STAT CARD
+  Widget _bigStat({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String label,
+  }) =>
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: cardShadow, blurRadius: 8, offset: const Offset(0, 3))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 24, color: color),
             ),
             const Spacer(),
             Text(value,
                 style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87)),
             const SizedBox(height: 2),
@@ -480,22 +683,22 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 28),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
@@ -512,7 +715,14 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: primary.withOpacity(0.1),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              primary.withOpacity(0.1),
+              accent.withOpacity(0.05),
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: primary.withOpacity(0.3), width: 1),
         ),
@@ -541,19 +751,4 @@ class _DoctorHomePageState extends State<DoctorHomePage> {
           ],
         ),
       );
-
-  // Helper: Get greeting based on time
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return "Good Morning";
-    if (hour < 17) return "Good Afternoon";
-    return "Good Evening";
-  }
-
-  // Helper: Get initials from name
-  String _getInitials(String name) {
-    final parts = name.split(' ');
-    if (parts.length < 2) return "DR";
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  }
 }
