@@ -10,6 +10,7 @@ import 'Home.dart';
 import 'Medication.dart';
 import 'doctor.dart';
 import 'Profile.dart';
+import 'Caregiver/CareInfo.dart'; 
 import '../shared/message.dart';
 import '../../models/caregiver_profile.dart';
 import '../../auth_service.dart';
@@ -32,7 +33,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
   final Map<String, bool> _expandedMap = {};
   final TextEditingController _searchController = TextEditingController();
 
-  static const Color pink = Color(0xFFFF6B6B);
+  static const Color pink = Color(0xFFE91E63);
   static const Color purple = Color(0xFF6C5CE7);
   static const Color green = Color(0xFF00B894);
 
@@ -310,6 +311,45 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
       final bio = c.bio.toLowerCase().contains(query);
       return name.contains(query) || skills || bio;
     }).toList();
+  }
+
+  // ADDED: Load assigned caregiver
+  Future<void> _navigateToAssignedCaregiver() async {
+    try {
+      final assignmentQuery = await _firestore
+          .collection('caregiver_assignments')
+          .where('patientId', isEqualTo: _currentUserId)
+          .where('status', isEqualTo: 'active')
+          .where('removedAt', isEqualTo: null)
+          .limit(1)
+          .get();
+
+      if (assignmentQuery.docs.isNotEmpty) {
+        final assignment = assignmentQuery.docs.first.data();
+        final caregiverId = assignment['caregiverId'];
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CaregiverInfoScreen(caregiverId: caregiverId),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No caregiver assigned yet'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading caregiver: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showBookingsInbox() {
@@ -942,10 +982,26 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                 children: [
                   Row(
                     children: [
-                      IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back, color: Colors.black54)),
-                      const Text('Find a Caregiver', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      const Spacer(),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.filter_list, color: Colors.black54)),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context), 
+                        icon: const Icon(Icons.arrow_back, color: Colors.black54),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 40),
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Find a Caregiver', 
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // UPDATED: Icon button for assigned caregiver
+                      IconButton(
+                        onPressed: _navigateToAssignedCaregiver,
+                        icon: Icon(Icons.people_alt, color: pink, size: 28),
+                        tooltip: 'My Caregiver',
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1332,7 +1388,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
               const SizedBox(height: 8),
               _infoRow(Icons.email_outlined, c.email),
               const SizedBox(height: 8),
-              _infoRow(Icons.attach_money, '\${c.hourlyRate}/hr'),
+              _infoRow(Icons.attach_money, '${c.hourlyRate}/hr'),
               const SizedBox(height: 8),
               _infoRow(Icons.access_time, '${c.availableHoursPerWeek} hrs/week'),
               const SizedBox(height: 8),
@@ -1424,9 +1480,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(context, Icons.home, 'Home', currentIndex == 0, 0),
-              _navItem(context, Icons.medication, 'Meds', currentIndex == 1, 1),
-              _navItem(context, Icons.local_hospital, 'Caregiver', currentIndex == 2, 2),
+              _navItem(context, Icons.home_outlined, 'Home', currentIndex == 0, 0),
+              _navItem(context, Icons.medical_services_outlined, 'Meds', currentIndex == 1, 1),
+              _navItem(context, Icons.people_alt_outlined, 'Caregiver', currentIndex == 2, 2),
               _navItem(context, Icons.calendar_today, 'Schedule', currentIndex == 3, 3),
               _navItem(context, Icons.person_outline, 'Profile', currentIndex == 4, 4),
             ],
@@ -1453,9 +1509,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: active ? pink : Colors.grey, size: 26),
+            Icon(icon, color: active ? pink : Colors.grey, size: 24),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: active ? pink : Colors.grey, fontWeight: active ? FontWeight.w600 : FontWeight.w500)),
+            Text(label, style: TextStyle(fontSize: 10, color: active ? pink : Colors.grey, fontWeight: active ? FontWeight.w600 : FontWeight.w400)),
           ],
         ),
       ),

@@ -17,8 +17,6 @@ class _DoctorPageState extends State<DoctorPage> {
   // Pink theme for doctor
   static const Color primary = Color(0xFFE91E63);
   static const Color success = Color(0xFF4CAF50);
-  static const Color warning = Color(0xFFFF9800);
-  static const Color info = Color(0xFF2196F3);
   static const Color muted = Colors.grey;
   static const Color background = Color(0xFFF8F9FA);
   static const Color cardShadow = Color(0x12000000);

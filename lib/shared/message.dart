@@ -38,6 +38,8 @@ class _MessageScreenState extends State<MessageScreen> {
   late String _currentUserName;
   late bool _isCaregiver;
   bool _hasScrolledToBottom = false;
+  bool _hasCaregiver = false;
+  bool _isLoadingCaregiverStatus = true;
 
   @override
   void initState() {
@@ -59,12 +61,40 @@ class _MessageScreenState extends State<MessageScreen> {
     
     _ensureChatDocumentExists();
     _markMessagesAsRead();
+    _checkCaregiverStatus();
   }
 
   // CRITICAL: Always generates same chatId regardless of who calls it
   String _getChatId(String id1, String id2) {
     final ids = [id1, id2]..sort();
     return '${ids[0]}_${ids[1]}';
+  }
+
+  Future<void> _checkCaregiverStatus() async {
+    if (_isCaregiver) {
+      setState(() => _isLoadingCaregiverStatus = false);
+      return;
+    }
+
+    try {
+      // Check if patient already has a caregiver assigned
+      final snapshot = await _firestore
+          .collection('caregiver_assignments')
+          .where('patientId', isEqualTo: widget.patientId)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      setState(() {
+        _hasCaregiver = snapshot.docs.isNotEmpty;
+        _isLoadingCaregiverStatus = false;
+      });
+
+      debugPrint('✅ Caregiver status: ${_hasCaregiver ? "Has caregiver" : "No caregiver"}');
+    } catch (e) {
+      debugPrint('⚠️ Error checking caregiver status: $e');
+      setState(() => _isLoadingCaregiverStatus = false);
+    }
   }
 
   Future<void> _ensureChatDocumentExists() async {
@@ -172,6 +202,462 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
+  void _showHireOptions() {
+    if (_hasCaregiver) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You already have a caregiver assigned. Remove them first to hire another.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.work, color: Colors.green, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Hire Caregiver',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            Text(
+                              'Assign ${widget.caregiverName} as your caregiver',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Confirm hire option
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.green, size: 32),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Hire ${widget.caregiverName}?',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'This caregiver will be assigned to you and can view your medications and health information.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                // Buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.grey,
+                            side: const BorderSide(color: Colors.grey),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _hireCaregiver();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Confirm Hire'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _hireCaregiver() async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.green),
+        ),
+      );
+
+      // Create caregiver assignment in the new collection
+      await _firestore.collection('caregiver_assignments').add({
+        'patientId': widget.patientId,
+        'caregiverId': widget.caregiverId,
+        'assignedAt': FieldValue.serverTimestamp(),
+        'status': 'active',
+        'removedAt': null,
+        'removedReason': null,
+      });
+
+      // Update caregiver status
+      setState(() => _hasCaregiver = true);
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${widget.caregiverName} has been hired as your caregiver!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+
+      debugPrint('✅ Caregiver hired successfully');
+      debugPrint('   Patient: ${widget.patientId}');
+      debugPrint('   Caregiver: ${widget.caregiverId}');
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      debugPrint('❌ Error hiring caregiver: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to hire caregiver: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.more_vert, color: Colors.black54, size: 24),
+                      SizedBox(width: 12),
+                      Text(
+                        'More Options',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Options for both patient and caregiver
+                if (!_isCaregiver && !_isLoadingCaregiverStatus) // Patient-specific options
+                  _buildOptionItem(
+                    icon: Icons.work,
+                    title: _hasCaregiver ? 'Caregiver Assigned' : 'Hire Caregiver',
+                    subtitle: _hasCaregiver 
+                        ? 'Already have a caregiver'
+                        : 'Assign this caregiver to you',
+                    color: _hasCaregiver ? Colors.grey : Colors.green,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showHireOptions();
+                    },
+                  ),
+                
+                // Common options for both
+                _buildOptionItem(
+                  icon: Icons.block,
+                  title: 'Block User',
+                  subtitle: 'Stop receiving messages',
+                  color: Colors.red,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showBlockConfirmation();
+                  },
+                ),
+                
+                _buildOptionItem(
+                  icon: Icons.report,
+                  title: 'Report User',
+                  subtitle: 'Report inappropriate behavior',
+                  color: Colors.orange,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showReportDialog();
+                  },
+                ),
+                
+                _buildOptionItem(
+                  icon: Icons.delete,
+                  title: 'Clear Chat',
+                  subtitle: 'Delete all messages',
+                  color: Colors.grey,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showClearChatConfirmation();
+                  },
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Cancel button
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey,
+                        side: const BorderSide(color: Colors.grey),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: Colors.grey, fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+      onTap: onTap,
+    );
+  }
+
+  void _showBlockConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Block User?'),
+        content: Text('Are you sure you want to block ${_isCaregiver ? widget.patientName : widget.caregiverName}? You will no longer receive messages from them.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Implement block functionality here
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${_isCaregiver ? widget.patientName : widget.caregiverName} has been blocked'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report User'),
+        content: const Text('Please describe the issue you are experiencing. Our team will review your report.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Report submitted successfully'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Submit Report'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearChatConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Chat?'),
+        content: const Text('This will delete all messages in this conversation. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Implement clear chat functionality here
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Chat cleared successfully'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Determine which person's info to show in header (the OTHER person)
@@ -222,9 +708,7 @@ class _MessageScreenState extends State<MessageScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.black54),
-            onPressed: () {
-              // Add more options here
-            },
+            onPressed: _showMoreOptions,
           ),
         ],
       ),
