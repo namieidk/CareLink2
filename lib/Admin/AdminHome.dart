@@ -7,6 +7,7 @@ import 'AdminDoctor.dart';      // List/Search/Add Doctors
 import 'AdminCaregiver.dart';   // List/Search/Add Caregivers
 import 'AdminPatient.dart';      // List/Search/Add Patients
 import 'Reports/AdminReports.dart';     // Reports screen
+import 'Reports/analytics.dart';     // Analytics screen
 import 'AdminProfile.dart'; // NEW: Profile screen import
 
 class AdminHomePage extends StatefulWidget {
@@ -700,9 +701,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 );
               }),
               _actionItem(Icons.analytics, 'Analytics', success, () {
-                // Navigate to analytics screen
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Analytics feature coming soon!')),
+                // Navigate to analytics screen - FIXED
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminAnalytics()),
                 );
               }),
               _actionItem(Icons.help_outline, 'Help', accent, () {
