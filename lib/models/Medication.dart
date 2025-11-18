@@ -39,7 +39,6 @@ class Medication {
     this.createdAt,
     this.updatedAt,
   });
-
   // Returns first time for backward compatibility
   String get time => times.isNotEmpty ? times.first : 'As needed';
 

@@ -41,23 +41,8 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
 
       final String caregiverId = user.uid;
 
-      // Load caregiver profile using CaregiverProfile model
-      final DocumentSnapshot caregiverDoc = await _firestore
-          .collection('caregiver_profiles')
-          .doc(caregiverId)
-          .get();
+      await _loadCaregiverProfile(caregiverId);
 
-      if (caregiverDoc.exists) {
-        final caregiverData = caregiverDoc.data() as Map<String, dynamic>;
-        final caregiverProfile = CaregiverProfile.fromMap(caregiverData, caregiverDoc.id);
-        
-        setState(() {
-          _caregiverName = '${caregiverProfile.firstName} ${caregiverProfile.lastName}'.trim();
-          _caregiverPhotoUrl = caregiverProfile.profilePhotoUrl;
-        });
-      }
-
-      // Get active assignments
       final QuerySnapshot assignmentSnap = await _firestore
           .collection('caregiver_assignments')
           .where('caregiverId', isEqualTo: caregiverId)
@@ -72,7 +57,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         _totalPatients = patientIds.length;
       });
 
-      // Load patient profiles
       final List<Map<String, dynamic>> patients = [];
       if (patientIds.isNotEmpty) {
         final QuerySnapshot patientSnap = await _firestore
@@ -94,7 +78,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         }
       }
 
-      // Load medications for these patients
       final List<Map<String, dynamic>> medicationReminders = [];
       int dueToday = 0;
 
@@ -116,7 +99,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
             final isPending = _compareTime(time, todayStr) >= 0;
             if (isPending) dueToday++;
 
-            // Find patient name
             final String patientId = medData['patientId'] as String;
             final patient = patients.firstWhere(
               (p) => p['id'] == patientId,
@@ -135,11 +117,9 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           }
         }
 
-        // Sort by time
         medicationReminders.sort((a, b) => _compareTime(a['time'], b['time']));
       }
 
-      // Calculate alerts (simplified - you can customize this logic)
       final int alerts = dueToday > 3 ? dueToday - 3 : 0;
 
       setState(() {
@@ -150,10 +130,60 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
         _isLoading = false;
       });
     } catch (error) {
-      debugPrint('Error loading home data: $error');
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadCaregiverProfile(String caregiverId) async {
+    try {
+      QuerySnapshot caregiverQuery = await _firestore
+          .collection('caregiver_profile')
+          .limit(1)
+          .get();
+
+      if (caregiverQuery.docs.isNotEmpty) {
+        final caregiverDoc = caregiverQuery.docs.first;
+        final caregiverData = caregiverDoc.data() as Map<String, dynamic>;
+        
+        final firstName = caregiverData['firstName'] ?? '';
+        final lastName = caregiverData['lastName'] ?? '';
+        final fullName = firstName.isNotEmpty && lastName.isNotEmpty 
+            ? '$firstName $lastName' 
+            : caregiverData['fullName'] ?? 'Caregiver';
+        
+        final profilePhotoUrl = caregiverData['profilePhotoUrl'] ?? 
+                              caregiverData['profilePicture'];
+        
+        setState(() {
+          _caregiverName = fullName;
+          _caregiverPhotoUrl = profilePhotoUrl;
+        });
+        return;
+      }
+
+      final User? user = _auth.currentUser;
+      if (user?.displayName != null) {
+        setState(() {
+          _caregiverName = user!.displayName!;
+        });
+      } else if (user?.email != null) {
+        setState(() {
+          _caregiverName = user!.email!.split('@').first;
+        });
+      }
+    } catch (error) {
+      final User? user = _auth.currentUser;
+      if (user?.displayName != null) {
+        setState(() {
+          _caregiverName = user!.displayName!;
+        });
+      } else if (user?.email != null) {
+        setState(() {
+          _caregiverName = user!.email!.split('@').first;
+        });
+      }
     }
   }
 
@@ -161,7 +191,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
 
   int _compareTime(String time1, String time2) {
     try {
-      // Simple string comparison for HH:MM AM/PM format
       return time1.compareTo(time2);
     } catch (error) {
       return -1;
@@ -175,7 +204,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Custom App Bar
             SliverToBoxAdapter(
               child: Container(
                 decoration: BoxDecoration(
@@ -193,7 +221,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Top Bar
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -315,8 +342,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                         ],
                       ),
                       SizedBox(height: 24),
-                      
-                      // Quick Stats
                       _isLoading 
                           ? _buildLoadingStats()
                           : Row(
@@ -351,13 +376,10 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                 ),
               ),
             ),
-            
-            // Content
             SliverPadding(
               padding: const EdgeInsets.all(20),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // Medication Reminders Section
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -388,10 +410,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       ),
                     ],
                   ),
-                  
                   SizedBox(height: 12),
-                  
-                  // Medication Cards
                   if (_isLoading)
                     _buildLoadingMedications()
                   else if (_medicationReminders.isEmpty)
@@ -408,10 +427,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                         SizedBox(height: 12),
                       ],
                     )),
-                  
                   SizedBox(height: 24),
-                  
-                  // My Patients Overview
                   Text(
                     'My Patients',
                     style: TextStyle(
@@ -420,10 +436,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       color: Colors.grey[900],
                     ),
                   ),
-                  
                   SizedBox(height: 16),
-                  
-                  // Patient Cards
                   if (_isLoading)
                     _buildLoadingPatients()
                   else if (_patients.isEmpty)
@@ -436,7 +449,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                           name: patient['name'],
                           age: patient['age'],
                           condition: patient['condition'],
-                          medicationCount: 0, // You can calculate this if needed
+                          medicationCount: 0,
                           lastChecked: 'Today',
                           statusColor: Color(0xFF4CAF50),
                           photoUrl: patient['photoUrl'],
@@ -444,10 +457,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                         SizedBox(height: 12),
                       ],
                     )),
-                  
                   SizedBox(height: 24),
-                  
-                  // Quick Actions
                   Text(
                     'Quick Actions',
                     style: TextStyle(
@@ -456,10 +466,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       color: Colors.grey[900],
                     ),
                   ),
-                  
                   SizedBox(height: 16),
-                  
-                  // Action Grid
                   GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
@@ -490,10 +497,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       ),
                     ],
                   ),
-                  
                   SizedBox(height: 24),
-                  
-                  // Recent Activity
                   Text(
                     'Recent Activity',
                     style: TextStyle(
@@ -502,30 +506,25 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       color: Colors.grey[900],
                     ),
                   ),
-                  
                   SizedBox(height: 16),
-                  
                   _buildActivityItem(
                     icon: Icons.check_circle,
                     title: 'Medication administered',
                     subtitle: 'Roberto Cruz - Metformin - 8:00 AM',
                     iconColor: Color(0xFF4CAF50),
                   ),
-                  
                   _buildActivityItem(
                     icon: Icons.event_available,
                     title: 'Appointment scheduled',
                     subtitle: 'Elena Torres - Dr. Martinez - Dec 15',
                     iconColor: Color(0xFF42A5F5),
                   ),
-                  
                   _buildActivityItem(
                     icon: Icons.warning_amber,
                     title: 'Missed medication alert',
                     subtitle: 'Miguel Santos - Reminder sent',
                     iconColor: Color(0xFFFFA726),
                   ),
-                  
                   SizedBox(height: 20),
                 ]),
               ),
@@ -533,13 +532,10 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           ],
         ),
       ),
-      
-      // Bottom Navigation Bar
       bottomNavigationBar: _buildBottomNav(context, 0),
     );
   }
 
-  // === LOADING WIDGETS ===
   Widget _buildLoadingStats() {
     return Row(
       children: [
@@ -656,21 +652,18 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
-  // === ALL HELPER WIDGETS BELOW ===
-
   Widget _buildQuickStat({
     required IconData icon,
     required String count,
     required String label,
   }) {
-    // Determine color based on label
     Color iconColor;
     if (label == 'My Patients') {
-      iconColor = Color(0xFF6C5CE7); // Purple
+      iconColor = Color(0xFF6C5CE7);
     } else if (label == 'Due Today') {
-      iconColor = Color(0xFF4CAF50); // Green
+      iconColor = Color(0xFF4CAF50);
     } else if (label == 'Alerts') {
-      iconColor = Color(0xFFFF6B6B); // Red
+      iconColor = Color(0xFFFF6B6B);
     } else {
       iconColor = Colors.grey[700]!;
     }
@@ -1116,7 +1109,6 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
-  // === BOTTOM NAVIGATION WITH PROFILE ROUTE ===
   Widget _buildBottomNav(BuildContext context, int currentIndex) {
     return Container(
       decoration: BoxDecoration(
@@ -1150,7 +1142,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     return Expanded(
       child: InkWell(
         onTap: () {
-          if (isActive) return; // Already on this screen
+          if (isActive) return;
 
           if (index == 0) {
             Navigator.pushReplacement(
@@ -1175,7 +1167,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
           } else if (index == 4) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => ProfileScreen()), // PROFILE NAVIGATION
+              MaterialPageRoute(builder: (context) => ProfileScreen()),
             );
           }
         },

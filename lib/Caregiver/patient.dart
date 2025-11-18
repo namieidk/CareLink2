@@ -228,21 +228,34 @@ class _PatientsScreenState extends State<PatientsScreen> {
         .snapshots()
         .listen((snapshot) {
       final List<Map<String, dynamic>> acceptedBookings = [];
+      final now = DateTime.now();
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        acceptedBookings.add({
-          'id': doc.id,
-          'patientName': data['patientName'] ?? 'Unknown',
-          'caregiverName': data['caregiverName'] ?? 'Unknown Caregiver',
-          'interviewType': data['interviewType'] ?? 'Video Call',
-          'startTime': data['startTime'] as Timestamp?,
-          'durationHours': data['durationHours'] ?? 1,
-          'meetLink': data['meetLink'],
-          'address': data['address'],
-          'notes': data['notes'] ?? '',
-          'respondedAt': data['respondedAt'] as Timestamp?,
-        });
+        final startTime = data['startTime'] as Timestamp?;
+        final durationHours = data['durationHours'] ?? 1;
+        
+        // Calculate end time of booking
+        if (startTime != null) {
+          final startDateTime = startTime.toDate();
+          final endDateTime = startDateTime.add(Duration(hours: durationHours));
+          
+          // Only include bookings that haven't ended yet
+          if (endDateTime.isAfter(now)) {
+            acceptedBookings.add({
+              'id': doc.id,
+              'patientName': data['patientName'] ?? 'Unknown',
+              'caregiverName': data['caregiverName'] ?? 'Unknown Caregiver',
+              'interviewType': data['interviewType'] ?? 'Video Call',
+              'startTime': startTime,
+              'durationHours': durationHours,
+              'meetLink': data['meetLink'],
+              'address': data['address'],
+              'notes': data['notes'] ?? '',
+              'respondedAt': data['respondedAt'] as Timestamp?,
+            });
+          }
+        }
       }
 
       acceptedBookings.sort((a, b) {
@@ -398,7 +411,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
           children: [
             _buildSheetHeader(
               'Accepted Bookings',
-              _totalAcceptedBookings > 0 ? '$_totalAcceptedBookings upcoming' : 'No accepted',
+              _totalAcceptedBookings > 0 ? '$_totalAcceptedBookings upcoming' : 'No upcoming',
               Icons.check_circle,
               green,
             ),
@@ -412,7 +425,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                             children: [
                               Icon(Icons.event_available, size: 64, color: Colors.grey[300]),
                               const SizedBox(height: 16),
-                              const Text('No accepted bookings', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                              const Text('No upcoming bookings', style: TextStyle(color: Colors.grey, fontSize: 16)),
                             ],
                           ),
                         )
