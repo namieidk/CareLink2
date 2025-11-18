@@ -46,6 +46,10 @@ class _PatientsScreenState extends State<PatientsScreen> {
   bool _isLoadingAcceptedBookings = true;
   int _totalAcceptedBookings = 0;
 
+  // Patient ratings
+  final Map<String, double> _patientRatings = {};
+  final Map<String, int> _patientReviewCounts = {};
+
   final AuthService _authService = AuthService();
 
   static const Color purple = Color(0xFF6C5CE7);
@@ -89,6 +93,12 @@ class _PatientsScreenState extends State<PatientsScreen> {
       final loaded = snapshot.docs
           .map((doc) => PatientProfile.fromMap(doc.data(), doc.id))
           .toList();
+      
+      // Load ratings for all patients
+      for (final patient in loaded) {
+        await _loadPatientRating(patient.id);
+      }
+      
       if (mounted) {
         setState(() {
           patients = loaded;
@@ -98,6 +108,439 @@ class _PatientsScreenState extends State<PatientsScreen> {
     } catch (e) {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  Future<void> _loadPatientRating(String patientId) async {
+    try {
+      final ratingsSnapshot = await _firestore
+          .collection('ratings')
+          .where('toUserId', isEqualTo: patientId)
+          .get();
+
+      final totalReviews = ratingsSnapshot.docs.length;
+      double averageRating = 0.0;
+
+      if (totalReviews > 0) {
+        double sum = 0.0;
+        for (final doc in ratingsSnapshot.docs) {
+          final data = doc.data();
+          final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+          sum += rating;
+        }
+        averageRating = sum / totalReviews;
+      }
+
+      setState(() {
+        _patientRatings[patientId] = averageRating;
+        _patientReviewCounts[patientId] = totalReviews;
+      });
+    } catch (e) {
+      debugPrint('Error loading patient rating: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 2))],
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back, color: Colors.black54),
+                      ),
+                      const Text('Browse Patients', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const Spacer(),
+                      IconButton(onPressed: () {}, icon: const Icon(Icons.search, color: Colors.black54)),
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const CarePatient()));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: purple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.people_outline, color: purple, size: 24),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _iconButton(icon: Icons.notifications_active, badge: _totalPendingBookings, color: purple, onTap: _showBookingRequests)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _iconButton(icon: Icons.check_circle, badge: _totalAcceptedBookings, color: green, onTap: _showAcceptedBookings)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _iconButton(icon: Icons.message, badge: _totalUnread, color: pink, onTap: _showMessagesInbox)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator(color: purple))
+                  : patients.isEmpty
+                      ? const Center(child: Text('No patients found.', style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: patients.length,
+                          itemBuilder: (_, i) => Column(
+                            children: [
+                              _buildPatientCard(patients[i]),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(context, 1),
+    );
+  }
+
+  Widget _iconButton({required IconData icon, required int badge, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Stack(
+          children: [
+            Center(child: Icon(icon, color: color, size: 28)),
+            if (badge > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(color: Color(0xFFFF5252), shape: BoxShape.circle),
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  child: Center(
+                    child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPatientCard(PatientProfile p) {
+    final bool isExpanded = _expandedMap[p.id] ?? false;
+    final chat = _messageList.firstWhere((c) => c['patientId'] == p.id, orElse: () => {'hasUnread': false});
+    final unread = chat['hasUnread'] == true;
+    final rating = _patientRatings[p.id] ?? 0.0;
+    final reviewCount = _patientReviewCounts[p.id] ?? 0;
+
+    return GestureDetector(
+      onTap: () => setState(() => _expandedMap[p.id] = !isExpanded),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE8EAED), width: 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(color: const Color(0xFFF5F6F7), borderRadius: BorderRadius.circular(16)),
+                  child: p.profilePhotoUrl != null && p.profilePhotoUrl!.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.network(p.profilePhotoUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 36, color: Colors.grey)),
+                        )
+                      : const Icon(Icons.person, size: 36, color: Colors.grey),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(p.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                          ),
+                          if (rating > 0) ...[
+                            const Icon(Icons.star, color: Colors.amber, size: 16),
+                            const SizedBox(width: 2),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Text('${p.age} years', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      if (p.conditions.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: purple.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text(p.conditions.first, style: const TextStyle(color: purple, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                    ],
+                  ),
+                ),
+                if (unread)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: const BoxDecoration(color: Color(0xFFFF5252), borderRadius: BorderRadius.all(Radius.circular(12))),
+                    child: const Text('!', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                const SizedBox(width: 8),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                ),
+              ],
+            ),
+            if (isExpanded) ...[
+              const SizedBox(height: 16),
+              _buildInfoRow(Icons.email_outlined, p.email, purple),
+              const SizedBox(height: 8),
+              _buildInfoRow(Icons.phone_outlined, p.phone, purple),
+              const SizedBox(height: 8),
+              _buildInfoRow(Icons.location_on_outlined, p.address, purple),
+              const SizedBox(height: 8),
+              if (p.bloodType.isNotEmpty) _buildInfoRow(Icons.bloodtype, p.bloodType, purple),
+              const SizedBox(height: 16),
+              const Divider(color: Color(0xFFE8EAED), height: 1),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MessageScreen(
+                              patientName: p.fullName,
+                              patientPhoto: p.profilePhotoUrl ?? '',
+                              patientId: p.id,
+                              caregiverId: _currentUserId,
+                              caregiverName: _currentUserName,
+                              caregiverPhoto: _currentUserPhoto,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.message, size: 18),
+                      label: const Text('Message'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: purple,
+                        side: const BorderSide(color: purple, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showBookingModal(p),
+                      icon: const Icon(Icons.work, size: 18),
+                      label: const Text('Book'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: purple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text, Color color) {
+    if (text.isEmpty || text == 'Not provided') return const SizedBox.shrink();
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+      ],
+    );
+  }
+
+  Widget _buildBottomNav(BuildContext context, int currentIndex) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE8EAED), width: 1)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _navItem(context, Icons.home, 'Home', currentIndex == 0, 0),
+              _navItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
+              _navItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
+              _navItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
+              _navItem(context, Icons.person, 'Profile', currentIndex == 4, 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(BuildContext ctx, IconData icon, String label, bool active, int index) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          if (active) return;
+          final target = {
+            0: CaregiverHomeScreen(),
+            1: const PatientsScreen(),
+            2: MedicationScreen(),
+            3: CalendarScreen(),
+            4: ProfileScreen(),
+          }[index]!;
+          Navigator.pushReplacement(ctx, MaterialPageRoute(builder: (_) => target));
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: active ? purple : Colors.grey, size: 26),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 11, color: active ? purple : Colors.grey, fontWeight: active ? FontWeight.w600 : FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSheetHeader(String title, String subtitle, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(bottom: BorderSide(color: Color(0xFFE8EAED), width: 1)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    Text(subtitle, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMsgCard(String name, String message, String time, bool isUnread, String photoUrl, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: isUnread ? pink.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isUnread ? pink.withOpacity(0.3) : const Color(0xFFE8EAED)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: const Color(0xFFF5F6F7),
+              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'P', style: const TextStyle(fontWeight: FontWeight.bold, color: pink)) : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: TextStyle(fontSize: 15, fontWeight: isUnread ? FontWeight.bold : FontWeight.w600, color: Colors.black87)),
+                  const SizedBox(height: 4),
+                  Text(message, style: TextStyle(fontSize: 13, color: isUnread ? Colors.black87 : Colors.black54, fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(time, style: TextStyle(fontSize: 11, color: isUnread ? pink : Colors.grey, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal)),
+                if (isUnread)
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(color: pink, shape: BoxShape.circle),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _listenToAllChats() {
@@ -1001,394 +1444,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 color: selected ? purple : Colors.grey[700],
                 fontWeight: selected ? FontWeight.bold : FontWeight.w500,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 2))],
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back, color: Colors.black54),
-                      ),
-                      const Text('Browse Patients', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      const Spacer(),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.search, color: Colors.black54)),
-                      InkWell(
-                        onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const CarePatient()));
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: purple.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.people_outline, color: purple, size: 24),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _iconButton(icon: Icons.notifications_active, badge: _totalPendingBookings, color: purple, onTap: _showBookingRequests)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _iconButton(icon: Icons.check_circle, badge: _totalAcceptedBookings, color: green, onTap: _showAcceptedBookings)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _iconButton(icon: Icons.message, badge: _totalUnread, color: pink, onTap: _showMessagesInbox)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: isLoading
-                  ? const Center(child: CircularProgressIndicator(color: purple))
-                  : patients.isEmpty
-                      ? const Center(child: Text('No patients found.', style: TextStyle(color: Colors.grey)))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(20),
-                          itemCount: patients.length,
-                          itemBuilder: (_, i) => Column(
-                            children: [
-                              _buildPatientCard(patients[i]),
-                              const SizedBox(height: 16),
-                            ],
-                          ),
-                        ),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(context, 1),
-    );
-  }
-
-  Widget _iconButton({required IconData icon, required int badge, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Stack(
-          children: [
-            Center(child: Icon(icon, color: color, size: 28)),
-            if (badge > 0)
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(color: Color(0xFFFF5252), shape: BoxShape.circle),
-                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                  child: Center(
-                    child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPatientCard(PatientProfile p) {
-    final bool isExpanded = _expandedMap[p.id] ?? false;
-    final chat = _messageList.firstWhere((c) => c['patientId'] == p.id, orElse: () => {'hasUnread': false});
-    final unread = chat['hasUnread'] == true;
-
-    return GestureDetector(
-      onTap: () => setState(() => _expandedMap[p.id] = !isExpanded),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE8EAED), width: 1),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(color: const Color(0xFFF5F6F7), borderRadius: BorderRadius.circular(16)),
-                  child: p.profilePhotoUrl != null && p.profilePhotoUrl!.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.network(p.profilePhotoUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 36, color: Colors.grey)),
-                        )
-                      : const Icon(Icons.person, size: 36, color: Colors.grey),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(p.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      Text('${p.age} years', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      if (p.conditions.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(top: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: purple.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                          child: Text(p.conditions.first, style: const TextStyle(color: purple, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ),
-                    ],
-                  ),
-                ),
-                if (unread)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(color: Color(0xFFFF5252), borderRadius: BorderRadius.all(Radius.circular(12))),
-                    child: const Text('!', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                const SizedBox(width: 8),
-                AnimatedRotation(
-                  turns: isExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                ),
-              ],
-            ),
-            if (isExpanded) ...[
-              const SizedBox(height: 16),
-              _buildInfoRow(Icons.email_outlined, p.email, purple),
-              const SizedBox(height: 8),
-              _buildInfoRow(Icons.phone_outlined, p.phone, purple),
-              const SizedBox(height: 8),
-              _buildInfoRow(Icons.location_on_outlined, p.address, purple),
-              const SizedBox(height: 8),
-              if (p.bloodType.isNotEmpty) _buildInfoRow(Icons.bloodtype, p.bloodType, purple),
-              const SizedBox(height: 16),
-              const Divider(color: Color(0xFFE8EAED), height: 1),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MessageScreen(
-                              patientName: p.fullName,
-                              patientPhoto: p.profilePhotoUrl ?? '',
-                              patientId: p.id,
-                              caregiverId: _currentUserId,
-                              caregiverName: _currentUserName,
-                              caregiverPhoto: _currentUserPhoto,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.message, size: 18),
-                      label: const Text('Message'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: purple,
-                        side: const BorderSide(color: purple, width: 1.5),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showBookingModal(p),
-                      icon: const Icon(Icons.work, size: 18),
-                      label: const Text('Book'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: purple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String text, Color color) {
-    if (text.isEmpty || text == 'Not provided') return const SizedBox.shrink();
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 10),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-      ],
-    );
-  }
-
-  Widget _buildBottomNav(BuildContext context, int currentIndex) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFE8EAED), width: 1)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _navItem(context, Icons.home, 'Home', currentIndex == 0, 0),
-              _navItem(context, Icons.people, 'Patients', currentIndex == 1, 1),
-              _navItem(context, Icons.medication, 'Medications', currentIndex == 2, 2),
-              _navItem(context, Icons.calendar_month, 'Calendar', currentIndex == 3, 3),
-              _navItem(context, Icons.person, 'Profile', currentIndex == 4, 4),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _navItem(BuildContext ctx, IconData icon, String label, bool active, int index) {
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          if (active) return;
-          final target = {
-            0: CaregiverHomeScreen(),
-            1: const PatientsScreen(),
-            2: MedicationScreen(),
-            3: CalendarScreen(),
-            4: ProfileScreen(),
-          }[index]!;
-          Navigator.pushReplacement(ctx, MaterialPageRoute(builder: (_) => target));
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: active ? purple : Colors.grey, size: 26),
-            const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: active ? purple : Colors.grey, fontWeight: active ? FontWeight.w600 : FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSheetHeader(String title, String subtitle, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(bottom: BorderSide(color: Color(0xFFE8EAED), width: 1)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-                    Text(subtitle, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-                  ],
-                ),
-              ),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.grey)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMsgCard(String name, String message, String time, bool isUnread, String photoUrl, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: isUnread ? pink.withOpacity(0.05) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isUnread ? pink.withOpacity(0.3) : const Color(0xFFE8EAED)),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: const Color(0xFFF5F6F7),
-              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-              child: photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'P', style: const TextStyle(fontWeight: FontWeight.bold, color: pink)) : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: TextStyle(fontSize: 15, fontWeight: isUnread ? FontWeight.bold : FontWeight.w600, color: Colors.black87)),
-                  const SizedBox(height: 4),
-                  Text(message, style: TextStyle(fontSize: 13, color: isUnread ? Colors.black87 : Colors.black54, fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(time, style: TextStyle(fontSize: 11, color: isUnread ? pink : Colors.grey, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal)),
-                if (isUnread)
-                  Container(
-                    margin: const EdgeInsets.only(top: 6),
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(color: pink, shape: BoxShape.circle),
-                  ),
-              ],
             ),
           ],
         ),

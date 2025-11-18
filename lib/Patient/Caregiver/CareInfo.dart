@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../../shared/message.dart';
 import '../../models/caregiver_profile.dart';
+import '../../models/rating.dart'; // ← ONLY THIS IMPORT ADDED
 
 class CaregiverInfoScreen extends StatefulWidget {
   final String? caregiverId;
@@ -61,14 +62,12 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
 
   Future<void> _loadCaregiverAssignment() async {
     try {
-      // If caregiverId is provided directly, use it
       if (widget.caregiverId != null) {
         _caregiverId = widget.caregiverId;
         await _loadCaregiverInfo();
         return;
       }
 
-      // Otherwise, look up the caregiver assignment for this patient
       final assignmentQuery = await _firestore
           .collection('caregiver_assignments')
           .where('patientId', isEqualTo: _currentUserId)
@@ -113,7 +112,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
     }
 
     try {
-      // Query caregiver_profile collection where caregiverId field matches
       final querySnapshot = await _firestore
           .collection('caregiver_profile')
           .where('caregiverId', isEqualTo: _caregiverId)
@@ -124,7 +122,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
         final doc = querySnapshot.docs.first;
         final data = doc.data();
         
-        // Create CaregiverProfile from the document data
         final caregiver = CaregiverProfile(
           id: doc.id,
           caregiverId: data['caregiverId'] ?? '',
@@ -135,7 +132,7 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
           bio: data['bio'] ?? '',
           experienceYears: (data['experienceYears'] as num?)?.toInt() ?? 0,
           hourlyRate: (data['hourlyRate'] as num?)?.toDouble() ?? 0.0,
-          availableHoursPerWeek: (data['avaiLabLeHoursPerWeek'] as num?)?.toInt() ?? 0,
+          availableHoursPerWeek: (data['availableHoursPerWeek'] as num?)?.toInt() ?? 0,
           licenseNumber: data['licenseNumber'] ?? '',
           education: data['education'] ?? '',
           employmentHistory: data['employmentHistory'] ?? '',
@@ -283,6 +280,97 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
     );
   }
 
+  // ← ONLY THIS FUNCTION + BUTTON BELOW ARE NEW
+  Future<void> _endServiceAndRate() async {
+    double rating = 5.0;
+    final commentController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('End Service & Rate Caregiver', textAlign: TextAlign.center),
+        content: SingleChildScrollView(
+          child: StatefulBuilder(
+            builder: (context, setStateDialog) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Thank you for using our service!\nPlease rate your caregiver:'),
+                const SizedBox(height: 20),
+                FittedBox(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) => IconButton(
+                      iconSize: 48,
+                      onPressed: () => setStateDialog(() => rating = i + 1.0),
+                      icon: Icon(
+                        i < rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 48,
+                      ),
+                    )),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: commentController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: 'Your feedback (optional)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: pink),
+            onPressed: () async {
+              await _firestore.collection('ratings').add({
+                'fromUserId': _currentUserId,
+                'fromUserRole': 'patient',
+                'fromUserName': _currentUserName,
+                'fromUserPhotoUrl': _currentUserPhoto,
+                'toUserId': _caregiver!.caregiverId,
+                'toUserRole': 'caregiver',
+                'toUserName': '${_caregiver!.firstName} ${_caregiver!.lastName}',
+                'toUserPhotoUrl': _caregiver!.profilePhotoUrl,
+                'rating': rating,
+                'comment': commentController.text.trim(),
+                'isAnonymous': false,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+
+              // Optional: Update assignment status to completed
+              final assignmentSnap = await _firestore
+                  .collection('caregiver_assignments')
+                  .where('patientId', isEqualTo: _currentUserId)
+                  .where('caregiverId', isEqualTo: _caregiver!.caregiverId)
+                  .get();
+              for (var doc in assignmentSnap.docs) {
+                await doc.reference.update({'status': 'completed'});
+              }
+
+              Navigator.pop(context, true);
+            },
+            child: const Text('Submit & End Service', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Service ended. Thank you for your rating!'), backgroundColor: green),
+      );
+      Navigator.pop(context);
+    }
+  }
+
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 100, 20, 20),
@@ -296,7 +384,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
       ),
       child: Column(
         children: [
-          // Profile Photo and Basic Info
           Row(
             children: [
               Container(
@@ -360,8 +447,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Action Buttons
           Row(
             children: [
               Expanded(
@@ -560,7 +645,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
                 )
               : Column(
                   children: [
-                    // Fixed Header - NOT SCROLLABLE
                     Container(
                       height: 300, 
                       child: Stack(
@@ -577,14 +661,12 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
                         ],
                       ),
                     ),
-                    // Scrollable Content
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Contact Information
                             _buildInfoSection(
                               'Contact Information',
                               Column(
@@ -595,7 +677,6 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
                               ),
                             ),
 
-                            // Professional Information
                             _buildInfoSection(
                               'Professional Information',
                               Column(
@@ -607,49 +688,63 @@ class _CaregiverInfoScreenState extends State<CaregiverInfoScreen> {
                               ),
                             ),
 
-                            // Bio
                             _buildInfoSection(
                               'About Me',
                               _buildBio(),
                             ),
 
-                            // Skills
                             _buildInfoSection(
                               'Skills & Specialties',
                               _buildSkills(),
                             ),
 
-                            // Languages
                             _buildInfoSection(
                               'Languages',
                               _buildLanguages(),
                             ),
 
-                            // Education
                             if (_caregiver!.education.isNotEmpty)
                               _buildInfoSection(
                                 'Education',
                                 Text(_caregiver!.education, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
                               ),
 
-                            // Employment History
                             if (_caregiver!.employmentHistory.isNotEmpty)
                               _buildInfoSection(
                                 'Employment History',
                                 Text(_caregiver!.employmentHistory, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
                               ),
 
-                            // Other Experience
                             if (_caregiver!.otherExperience.isNotEmpty)
                               _buildInfoSection(
                                 'Other Experience',
                                 Text(_caregiver!.otherExperience, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
                               ),
 
-                            // Certifications
                             _buildInfoSection(
                               'Certifications',
                               _buildCertifications(),
+                            ),
+
+                            const SizedBox(height: 40),
+
+                            // ← ONLY THIS BUTTON WAS ADDED
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _endServiceAndRate,
+                                icon: const Icon(Icons.stop_circle, color: Colors.white),
+                                label: const Text(
+                                  'End Service & Rate Caregiver',
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red[600],
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  elevation: 8,
+                                ),
+                              ),
                             ),
 
                             const SizedBox(height: 40),

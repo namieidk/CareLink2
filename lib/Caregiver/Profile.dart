@@ -81,27 +81,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // Load reviews
-      final reviewsSnapshot = await FirebaseFirestore.instance
-          .collection('reviews')
-          .where('caregiverId', isEqualTo: currentUserId)
+      // Load ratings from the correct collection
+      final ratingsSnapshot = await FirebaseFirestore.instance
+          .collection('ratings')
+          .where('toUserId', isEqualTo: currentUserId)
           .orderBy('createdAt', descending: true)
           .get();
 
-      totalReviews = reviewsSnapshot.docs.length;
+      totalReviews = ratingsSnapshot.docs.length;
 
       if (totalReviews > 0) {
         double sum = 0.0;
-        reviews = reviewsSnapshot.docs.map((doc) {
+        reviews = ratingsSnapshot.docs.map((doc) {
           final data = doc.data();
           final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
           sum += rating;
           return {
             'id': doc.id,
-            'patientName': data['patientName'] ?? 'Anonymous',
+            'patientName': data['fromUserName'] ?? 'Anonymous',
             'rating': rating,
             'comment': data['comment'] ?? '',
             'createdAt': data['createdAt'] as Timestamp?,
+            'fromUserPhotoUrl': data['fromUserPhotoUrl'],
           };
         }).toList();
         averageRating = sum / totalReviews;
@@ -454,10 +455,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   CircleAvatar(
                                     radius: 18,
                                     backgroundColor: primary.withOpacity(0.15),
-                                    child: Text(
-                                      (review['patientName'] as String).isEmpty ? 'A' : (review['patientName'] as String)[0].toUpperCase(),
-                                      style: const TextStyle(color: primary, fontWeight: FontWeight.bold),
-                                    ),
+                                    backgroundImage: review['fromUserPhotoUrl'] != null 
+                                        ? NetworkImage(review['fromUserPhotoUrl'] as String)
+                                        : null,
+                                    child: review['fromUserPhotoUrl'] == null
+                                        ? Text(
+                                            (review['patientName'] as String).isEmpty ? 'A' : (review['patientName'] as String)[0].toUpperCase(),
+                                            style: const TextStyle(color: primary, fontWeight: FontWeight.bold),
+                                          )
+                                        : null,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(

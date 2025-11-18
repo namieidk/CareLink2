@@ -5,19 +5,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
-
 import 'Home.dart';
 import 'Medication.dart';
 import 'doctor.dart';
 import 'Profile.dart';
-import 'Caregiver/CareInfo.dart'; 
+import 'Caregiver/CareInfo.dart';
 import '../shared/message.dart';
 import '../../models/caregiver_profile.dart';
+import '../models/rating.dart'; // ← ONLY THIS IMPORT ADDED
 import '../../auth_service.dart';
 
 class PatientCaregiverScreen extends StatefulWidget {
   const PatientCaregiverScreen({super.key});
-
   @override
   State<PatientCaregiverScreen> createState() => _PatientCaregiverScreenState();
 }
@@ -27,32 +26,31 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
   late final String _currentUserId;
   String _currentUserName = 'Patient';
   String _currentUserPhoto = '';
-
   List<CaregiverProfile> caregivers = [];
   bool isLoading = true;
   final Map<String, bool> _expandedMap = {};
   final TextEditingController _searchController = TextEditingController();
-
   static const Color pink = Color(0xFFE91E63);
   static const Color purple = Color(0xFF6C5CE7);
   static const Color green = Color(0xFF00B894);
 
-  // Messages
   List<Map<String, dynamic>> _messageList = [];
   bool _isLoadingMessages = true;
   int _totalUnread = 0;
 
-  // Pending incoming requests (only from caregivers)
   List<Map<String, dynamic>> _bookingList = [];
   bool _isLoadingBookings = true;
   int _totalPendingBookings = 0;
 
-  // Accepted bookings (both directions, once accepted)
   List<Map<String, dynamic>> _acceptedBookingList = [];
   bool _isLoadingAcceptedBookings = true;
   int _totalAcceptedBookings = 0;
 
   final AuthService _authService = AuthService();
+
+  // ← NEW: Store average rating and review count for each caregiver
+  final Map<String, double> _averageRatings = {};
+  final Map<String, int> _reviewCounts = {};
 
   @override
   void initState() {
@@ -68,7 +66,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     _loadPatientName();
     _loadCaregivers();
     _listenToMessages();
-    _listenToBookings();           // only real incoming from caregivers
+    _listenToBookings();
     _listenToAcceptedBookings();
     _searchController.addListener(() => setState(() {}));
   }
@@ -102,6 +100,29 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           })
           .whereType<CaregiverProfile>()
           .toList();
+
+      // ← NEW: Load average rating for each caregiver
+      for (var caregiver in loaded) {
+        final ratingSnap = await _firestore
+            .collection('ratings')
+            .where('toUserId', isEqualTo: caregiver.caregiverId)
+            .where('toUserRole', isEqualTo: 'caregiver')
+            .get();
+
+        if (ratingSnap.docs.isNotEmpty) {
+          double sum = 0;
+          for (var doc in ratingSnap.docs) {
+            sum += (doc.data()['rating'] as num).toDouble();
+          }
+          final avg = sum / ratingSnap.docs.length;
+          _averageRatings[caregiver.caregiverId] = avg;
+          _reviewCounts[caregiver.caregiverId] = ratingSnap.docs.length;
+        } else {
+          _averageRatings[caregiver.caregiverId] = 0.0;
+          _reviewCounts[caregiver.caregiverId] = 0;
+        }
+      }
+
       if (mounted) {
         setState(() {
           caregivers = loaded;
@@ -131,27 +152,21 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     _firestore.collection('messages').snapshots().listen((snapshot) async {
       List<Map<String, dynamic>> chats = [];
       int totalUnread = 0;
-
       for (var chatDoc in snapshot.docs) {
         final chatId = chatDoc.id;
         if (!chatId.contains(_currentUserId)) continue;
-
         final ids = chatId.split('_');
         if (ids.length != 2) continue;
-
         final caregiverId = ids[0] == _currentUserId ? ids[1] : ids[0];
-
         final caregiverQuery = await _firestore
             .collection('caregiver_profile')
             .where('caregiverId', isEqualTo: caregiverId)
             .limit(1)
             .get();
         if (caregiverQuery.docs.isEmpty) continue;
-
         final cgData = caregiverQuery.docs.first.data();
         final caregiverName = '${cgData['firstName'] ?? 'Caregiver'} ${cgData['lastName'] ?? ''}'.trim();
         final caregiverPhoto = cgData['profilePhotoUrl'] as String? ?? '';
-
         final lastMsgQuery = await _firestore
             .collection('messages')
             .doc(chatId)
@@ -159,21 +174,17 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             .orderBy('timestamp', descending: true)
             .limit(1)
             .get();
-
         if (lastMsgQuery.docs.isEmpty) continue;
-
         final msgData = lastMsgQuery.docs.first.data();
         final lastMessage = msgData['text'] ?? 'Sent a photo';
         final lastTime = msgData['timestamp'] as Timestamp?;
         final senderId = msgData['senderId'] as String?;
-
         bool isUnread = false;
         if (senderId != null && senderId != _currentUserId &&
             (msgData['isRead'] == null || msgData['isRead'] == false)) {
           isUnread = true;
           totalUnread++;
         }
-
         chats.add({
           'chatId': chatId,
           'caregiverId': caregiverId,
@@ -184,7 +195,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           'isUnread': isUnread,
         });
       }
-
       chats.sort((a, b) {
         final t1 = a['lastTime'] as Timestamp?;
         final t2 = b['lastTime'] as Timestamp?;
@@ -192,7 +202,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         if (t2 == null) return -1;
         return t2.compareTo(t1);
       });
-
       if (mounted) {
         setState(() {
           _messageList = chats;
@@ -205,7 +214,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     });
   }
 
-  // Only real incoming requests from caregivers - FIXED VERSION
   void _listenToBookings() {
     _firestore
         .collection('bookings')
@@ -214,12 +222,8 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         .snapshots()
         .listen((snapshot) {
       final List<Map<String, dynamic>> bookings = [];
-
       for (var doc in snapshot.docs) {
         final data = doc.data();
-
-        // Show ALL pending bookings for this patient, regardless of who requested
-        // This includes bookings from caregivers AND patient's own requests
         bookings.add({
           'id': doc.id,
           'caregiverName': data['caregiverName'] ?? 'Unknown',
@@ -231,10 +235,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           'address': data['address'],
           'notes': data['notes'] ?? '',
           'createdAt': data['createdAt'] as Timestamp?,
-          'requestedBy': data['requestedBy'] ?? 'patient', // Track who made the request
+          'requestedBy': data['requestedBy'] ?? 'patient',
         });
       }
-
       bookings.sort((a, b) {
         final t1 = a['createdAt'] as Timestamp?;
         final t2 = b['createdAt'] as Timestamp?;
@@ -242,7 +245,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         if (t2 == null) return -1;
         return t2.compareTo(t1);
       });
-
       if (mounted) {
         setState(() {
           _bookingList = bookings;
@@ -255,7 +257,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     });
   }
 
-  // All accepted bookings (both directions)
   void _listenToAcceptedBookings() {
     _firestore
         .collection('bookings')
@@ -264,24 +265,27 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         .snapshots()
         .listen((snapshot) {
       final List<Map<String, dynamic>> acceptedBookings = [];
-
+      final now = DateTime.now();
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        acceptedBookings.add({
-          'id': doc.id,
-          'caregiverName': data['caregiverName'] ?? 'Unknown',
-          'patientName': data['patientName'] ?? 'Unknown Patient',
-          'interviewType': data['interviewType'] ?? 'Video Call',
-          'startTime': data['startTime'] as Timestamp?,
-          'durationHours': data['durationHours'] ?? 1,
-          'meetLink': data['meetLink'],
-          'address': data['address'],
-          'notes': data['notes'] ?? '',
-          'respondedAt': data['respondedAt'] as Timestamp?,
-          'requestedBy': data['requestedBy'] ?? 'patient',
-        });
+        final startTime = data['startTime'] as Timestamp?;
+        final dateTime = startTime?.toDate();
+        if (dateTime != null && dateTime.isAfter(now)) {
+          acceptedBookings.add({
+            'id': doc.id,
+            'caregiverName': data['caregiverName'] ?? 'Unknown',
+            'patientName': data['patientName'] ?? 'Unknown Patient',
+            'interviewType': data['interviewType'] ?? 'Video Call',
+            'startTime': startTime,
+            'durationHours': data['durationHours'] ?? 1,
+            'meetLink': data['meetLink'],
+            'address': data['address'],
+            'notes': data['notes'] ?? '',
+            'respondedAt': data['respondedAt'] as Timestamp?,
+            'requestedBy': data['requestedBy'] ?? 'patient',
+          });
+        }
       }
-
       acceptedBookings.sort((a, b) {
         final t1 = a['startTime'] as Timestamp?;
         final t2 = b['startTime'] as Timestamp?;
@@ -289,7 +293,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         if (t2 == null) return -1;
         return t1.compareTo(t2);
       });
-
       if (mounted) {
         setState(() {
           _acceptedBookingList = acceptedBookings;
@@ -313,7 +316,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     }).toList();
   }
 
-  // ADDED: Load assigned caregiver
   Future<void> _navigateToAssignedCaregiver() async {
     try {
       final assignmentQuery = await _firestore
@@ -323,11 +325,10 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           .where('removedAt', isEqualTo: null)
           .limit(1)
           .get();
-
       if (assignmentQuery.docs.isNotEmpty) {
         final assignment = assignmentQuery.docs.first.data();
         final caregiverId = assignment['caregiverId'];
-        
+       
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -420,7 +421,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           children: [
             _buildBottomSheetHeader(
               'Accepted Bookings',
-              _totalAcceptedBookings > 0 ? '$_totalAcceptedBookings upcoming' : 'No accepted bookings',
+              _totalAcceptedBookings > 0 ? '$_totalAcceptedBookings upcoming' : 'No upcoming bookings',
               Icons.check_circle,
               green,
             ),
@@ -434,7 +435,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                             children: [
                               Icon(Icons.event_available, size: 64, color: Colors.grey[300]),
                               const SizedBox(height: 16),
-                              const Text('No accepted bookings', style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500)),
+                              const Text('No upcoming bookings', style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500)),
                               const SizedBox(height: 8),
                               const Text('Accepted bookings will appear here', style: TextStyle(color: Colors.grey, fontSize: 13)),
                             ],
@@ -456,7 +457,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     final startTime = booking['startTime'] as Timestamp?;
     final dateTime = startTime?.toDate();
     final requestedBy = booking['requestedBy'] ?? 'patient';
-
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
@@ -540,7 +540,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          // Only show action buttons for requests from caregivers
           if (requestedBy == 'caregiver')
             Row(
               children: [
@@ -574,7 +573,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
               ],
             )
           else
-            // Show status for patient's own requests
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -607,7 +605,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     final dateTime = startTime?.toDate();
     final meetLink = booking['meetLink'] as String?;
     final requestedBy = booking['requestedBy'] ?? 'patient';
-
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
@@ -742,7 +739,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator(color: purple)),
       );
-
       String? generatedMeetLink;
       if (status == 'accepted' && (bookingData['interviewType'] ?? 'Video Call') == 'Video Call') {
         final dateTime = (bookingData['startTime'] as Timestamp).toDate();
@@ -752,7 +748,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
           summary: 'Interview: ${bookingData['caregiverName']} (Video Call)',
         );
       }
-
       final updateData = <String, dynamic>{
         'status': status,
         'respondedAt': FieldValue.serverTimestamp(),
@@ -760,12 +755,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
       if (generatedMeetLink != null) {
         updateData['meetLink'] = generatedMeetLink;
       }
-
       await _firestore.collection('bookings').doc(bookingId).update(updateData);
-
       if (mounted) Navigator.pop(context);
       if (mounted) Navigator.pop(context);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -983,7 +975,7 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () => Navigator.pop(context), 
+                        onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back, color: Colors.black54),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 40),
@@ -991,12 +983,11 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          'Find a Caregiver', 
+                          'Find a Caregiver',
                           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // UPDATED: Icon button for assigned caregiver
                       IconButton(
                         onPressed: _navigateToAssignedCaregiver,
                         icon: Icon(Icons.people_alt, color: pink, size: 28),
@@ -1096,7 +1087,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
     int durationHours = 1;
     final notesController = TextEditingController();
     final addressController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1220,18 +1210,14 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                                 );
                                 return;
                               }
-
                               final startDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
-
                               showDialog(
                                 context: context,
                                 barrierDismissible: false,
                                 builder: (_) => const Center(child: CircularProgressIndicator(color: pink)),
                               );
-
                               String? meetLink;
                               String? address;
-
                               if (interviewType == 'Video Call') {
                                 final link = await _authService.createGoogleMeetLink(
                                   startTime: startDateTime,
@@ -1254,7 +1240,6 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                                 address = addressController.text.trim();
                                 Navigator.pop(context);
                               }
-
                               final bookingData = {
                                 'patientId': _currentUserId,
                                 'patientName': _currentUserName,
@@ -1267,10 +1252,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                                 'meetLink': meetLink,
                                 'address': address,
                                 'status': 'pending',
-                                'requestedBy': 'patient',   // NEW FIELD
+                                'requestedBy': 'patient',
                                 'createdAt': FieldValue.serverTimestamp(),
                               };
-
                               try {
                                 await _firestore.collection('bookings').add(bookingData);
                                 Navigator.pop(context);
@@ -1333,6 +1317,9 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
   Widget _buildExpandableCaregiverCard(CaregiverProfile c) {
     final bool isExpanded = _expandedMap[c.id] ?? false;
     final name = '${c.firstName} ${c.lastName}';
+    final avgRating = _averageRatings[c.caregiverId] ?? 0.0;
+    final reviewCount = _reviewCounts[c.caregiverId] ?? 0;
+
     return GestureDetector(
       onTap: () => setState(() => _expandedMap[c.id] = !isExpanded),
       child: AnimatedContainer(
@@ -1367,7 +1354,27 @@ class _PatientCaregiverScreenState extends State<PatientCaregiverScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                          ),
+                          // ← RATING ADDED HERE
+                          if (avgRating > 0)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star, color: Colors.amber, size: 18),
+                                const SizedBox(width: 4),
+                                Text(
+                                  avgRating.toStringAsFixed(1),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                ),
+                                Text(' ($reviewCount)', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                              ],
+                            ),
+                        ],
+                      ),
                       Text('${c.experienceYears}+ yrs exp', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                       if (c.skills.isNotEmpty)
                         Container(
